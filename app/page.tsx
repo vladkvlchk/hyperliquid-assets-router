@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Token } from "@/lib/domain/types";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
+import { useBalances } from "@/lib/state/use-balances";
 import { Panel, SectionLabel } from "@/components/panel";
 import { TokenSelect } from "@/components/token-select";
 import { AmountInput } from "@/components/amount-input";
@@ -20,6 +21,7 @@ export default function AssetRouter() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { login, logout, authenticated, user } = usePrivy();
+  const { data: balances } = useBalances(user?.wallet?.address);
   const { state, discoverRoute, reset } = useRouteMachine();
 
   const parsedAmount = parseFloat(amount) || 0;
@@ -118,6 +120,29 @@ export default function AssetRouter() {
       </header>
 
       <main className="relative z-10 max-w-[600px] mx-auto px-6 py-8">
+        {/* Balances */}
+        {authenticated && balances && balances.length > 0 && (
+          <div className="mb-4">
+            <Panel>
+              <SectionLabel>Balances</SectionLabel>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                {balances
+                  .filter((b) => parseFloat(b.total) > 0)
+                  .map((b) => (
+                    <span key={b.coin} className="text-xs text-hl-muted">
+                      {b.coin}{" "}
+                      <span className="text-hl-text">
+                        {parseFloat(b.total).toLocaleString(undefined, {
+                          maximumFractionDigits: 4,
+                        })}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            </Panel>
+          </div>
+        )}
+
         {/* Input Panel */}
         <Panel>
           <div className="flex flex-col gap-4">

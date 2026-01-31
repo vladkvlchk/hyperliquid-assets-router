@@ -63,3 +63,11 @@ export interface RouteWarning {
   message: string;
   severity: "info" | "warn" | "error";
 }
+
+export interface SpotBalance {
+  coin: string;
+  token: number;
+  total: string;
+  hold: string;
+  entryNtl: string;
+}
