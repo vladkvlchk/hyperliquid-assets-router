@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@custom-variant portrait {
+  @media (orientation: portrait) {
+    @slot;
   }
 }
 
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Hyperliquid palette — derived from brand colors:
+     #072724 (bg), #97FCE4 (accent), #dbfbf6 (text), #B0C5C1 (muted) */
+  --color-hl-bg: #072724;
+  --color-hl-surface: #0b302c;
+  --color-hl-input: #0a2c28;
+  --color-hl-deep: #051e1c;
+  --color-hl-hover: #0f3833;
+  --color-hl-border: #153a36;
+  --color-hl-border-hover: #1f4f4a;
+  --color-hl-text: #dbfbf6;
+  --color-hl-text-dim: #4d6b66;
+  --color-hl-muted: #B0C5C1;
+  --color-hl-accent: #97FCE4;
+  --color-hl-warn: #f0b232;
+  --color-hl-error: #ef4444;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-hl-bg);
+  color: var(--color-hl-text);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Scrollbar styling for the dark theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hl-border) transparent;
+}
+
+::selection {
+  background: var(--color-hl-accent);
+  color: var(--color-hl-bg);
+}
+
+/* Video page palette — black, blue, white to match the hero video */
+.theme-video {
+  --color-hl-bg: #08080f;
+  --color-hl-surface: #0e0e1a;
+  --color-hl-input: #0c0c16;
+  --color-hl-deep: #06060c;
+  --color-hl-hover: #16162a;
+  --color-hl-border: #1c1c30;
+  --color-hl-border-hover: #2a2a48;
+  --color-hl-text: #eeeef4;
+  --color-hl-text-dim: #4a4a68;
+  --color-hl-muted: #8888a8;
+  --color-hl-accent: #5b9cf5;
 }

@@ -1,63 +1,228 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useRef, useEffect } from "react";
+import { Token } from "@/lib/domain/types";
+import { useRouteMachine } from "@/lib/state/use-route-machine";
+import { Panel, SectionLabel } from "@/components/panel";
+import { TokenSelect } from "@/components/token-select";
+import { AmountInput } from "@/components/amount-input";
+import { RoutePreview } from "@/components/route-preview";
+import { PriceEstimate } from "@/components/price-estimate";
+import { WarningBanner } from "@/components/warning-banner";
+
+export default function AssetRouter() {
+  const [tokenA, setTokenA] = useState<Token | null>(null);
+  const [tokenB, setTokenB] = useState<Token | null>(null);
+  const [amount, setAmount] = useState("");
+
+  const [muted, setMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const { state, discoverRoute, reset } = useRouteMachine();
+
+  const parsedAmount = parseFloat(amount) || 0;
+
+  // Unmute on first user interaction — browsers require a user gesture before allowing audio
+  useEffect(() => {
+    function unmute() {
+      if (videoRef.current && videoRef.current.muted) {
+        videoRef.current.muted = false;
+        setMuted(false);
+      }
+      window.removeEventListener("click", unmute);
+      window.removeEventListener("keydown", unmute);
+    }
+    window.addEventListener("click", unmute, { once: true });
+    window.addEventListener("keydown", unmute, { once: true });
+    return () => {
+      window.removeEventListener("click", unmute);
+      window.removeEventListener("keydown", unmute);
+    };
+  }, []);
+
+  function toggleMute() {
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setMuted(videoRef.current.muted);
+    }
+  }
+
+  function handleDiscover() {
+    discoverRoute(tokenA, tokenB, parsedAmount);
+  }
+
+  function handleSwapTokens() {
+    const prevA = tokenA;
+    setTokenA(tokenB);
+    setTokenB(prevA);
+    reset();
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="theme-video relative min-h-screen">
+      {/* Background video */}
+      <video
+        ref={videoRef}
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="fixed inset-0 w-full h-full object-cover z-0 blur-sm portrait:rotate-90 portrait:scale-[1.8]"
+      >
+        <source src="/lighter-3.1.mp4" type="video/mp4" />
+      </video>
+      {/* Overlay so UI stays readable */}
+      <div className="fixed inset-0 z-0" />
+
+      {/* Mute toggle */}
+      <button
+        onClick={toggleMute}
+        className="fixed bottom-4 right-4 z-50 px-2 py-1 text-[10px] uppercase tracking-wider
+                   border border-hl-border bg-hl-bg/70 text-hl-text-dim hover:text-hl-muted
+                   backdrop-blur-sm transition-colors cursor-pointer"
+      >
+        {muted ? "unmute" : "mute"}
+      </button>
+
+      {/* Header */}
+      <header className="relative z-10 border-b border-hl-border px-6 py-3">
+        <div className="max-w-[600px] mx-auto flex items-center justify-between">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-medium text-hl-text">
+              Asset Router
+            </span>
+            <span className="text-[10px] text-hl-text-dim">
+              hyperliquid spot
+            </span>
+          </div>
+          <a
+            href="/cases/hyperliquid-asset-routing"
+            className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider"
+          >
+            Case Study
+          </a>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      </header>
+
+      <main className="relative z-10 max-w-[600px] mx-auto px-6 py-8">
+        {/* Input Panel */}
+        <Panel>
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <TokenSelect
+                label="From"
+                value={tokenA}
+                onChange={(t) => {
+                  setTokenA(t);
+                  reset();
+                }}
+                exclude={tokenB?.symbol}
+              />
+              <TokenSelect
+                label="To"
+                value={tokenB}
+                onChange={(t) => {
+                  setTokenB(t);
+                  reset();
+                }}
+                exclude={tokenA?.symbol}
+              />
+            </div>
+
+            {/* Swap direction button */}
+            {tokenA && tokenB && (
+              <button
+                onClick={handleSwapTokens}
+                className="self-center text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
+              >
+                [swap direction]
+              </button>
+            )}
+
+            <AmountInput
+              value={amount}
+              onChange={(v) => {
+                setAmount(v);
+                reset();
+              }}
+              tokenSymbol={tokenA?.symbol}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+            <button
+              onClick={handleDiscover}
+              disabled={
+                !tokenA ||
+                !tokenB ||
+                parsedAmount <= 0 ||
+                state.status === "discovering"
+              }
+              className="w-full py-2 text-sm font-medium border border-hl-accent/30 text-hl-accent
+                         hover:bg-hl-accent/10 transition-colors
+                         disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {state.status === "discovering"
+                ? "Discovering..."
+                : "Find Route"}
+            </button>
+          </div>
+        </Panel>
+
+        {/* Results */}
+        <div className="mt-4 flex flex-col gap-3">
+          {/* Route found */}
+          {state.status === "route_found" && (
+            <>
+              <Panel>
+                <SectionLabel>Route</SectionLabel>
+                <RoutePreview route={state.route} />
+              </Panel>
+
+              <PriceEstimate
+                route={state.route}
+                inputAmount={parsedAmount}
+              />
+
+              <WarningBanner warnings={state.route.warnings} />
+            </>
+          )}
+
+          {/* No route */}
+          {state.status === "no_route" && (
+            <Panel>
+              <div className="text-xs text-hl-error">
+                No route found from {state.from.symbol} to {state.to.symbol}.
+                <span className="text-hl-text-dim ml-1">
+                  No available pair path exists within 3 hops.
+                </span>
+              </div>
+            </Panel>
+          )}
+
+          {/* Error */}
+          {state.status === "error" && (
+            <Panel>
+              <div className="text-xs text-hl-error">{state.message}</div>
+            </Panel>
+          )}
+
+          {/* Idle hint */}
+          {state.status === "idle" && tokenA && tokenB && parsedAmount > 0 && (
+            <div className="text-[10px] text-hl-text-dim text-center py-2">
+              Press &quot;Find Route&quot; to discover the optimal path
+            </div>
+          )}
+        </div>
+
+        {/* Footer info */}
+        <div className="mt-8 border-t border-hl-border pt-4 text-[10px] text-hl-text-dim space-y-1">
+          <div>
+            Data: mock orderbooks &middot; Routing: BFS shortest path &middot;
+            Estimation: orderbook walk
+          </div>
+          <div>
+            All prices are simulated. This is not connected to the Hyperliquid
+            exchange.
+          </div>
         </div>
       </main>
     </div>
