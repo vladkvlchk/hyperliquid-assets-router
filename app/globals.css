@@ -10,19 +10,18 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* Hyperliquid palette — derived from brand colors:
-     #072724 (bg), #97FCE4 (accent), #dbfbf6 (text), #B0C5C1 (muted) */
-  --color-hl-bg: #072724;
-  --color-hl-surface: #0b302c;
-  --color-hl-input: #0a2c28;
-  --color-hl-deep: #051e1c;
-  --color-hl-hover: #0f3833;
-  --color-hl-border: #153a36;
-  --color-hl-border-hover: #1f4f4a;
-  --color-hl-text: #dbfbf6;
-  --color-hl-text-dim: #4d6b66;
-  --color-hl-muted: #B0C5C1;
-  --color-hl-accent: #97FCE4;
+  /* Blue palette — same tonal structure, shifted to blue */
+  --color-hl-bg: #070f24;
+  --color-hl-surface: #0b1630;
+  --color-hl-input: #0a142c;
+  --color-hl-deep: #050c1e;
+  --color-hl-hover: #0f1f3d;
+  --color-hl-border: #152a4a;
+  --color-hl-border-hover: #1f3d5f;
+  --color-hl-text: #dbe8fb;
+  --color-hl-text-dim: #4d5f7a;
+  --color-hl-muted: #b0bdd0;
+  --color-hl-accent: #5b9cf5;
   --color-hl-warn: #f0b232;
   --color-hl-error: #ef4444;
 }

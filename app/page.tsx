@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { Token } from "@/lib/domain/types";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
 import { Panel, SectionLabel } from "@/components/panel";
@@ -18,6 +19,7 @@ export default function AssetRouter() {
   const [muted, setMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const { login, logout, authenticated, user } = usePrivy();
   const { state, discoverRoute, reset } = useRouteMachine();
 
   const parsedAmount = parseFloat(amount) || 0;
@@ -95,12 +97,23 @@ export default function AssetRouter() {
               hyperliquid spot
             </span>
           </div>
-          <a
-            href="/cases/hyperliquid-asset-routing"
-            className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider"
-          >
-            Case Study
-          </a>
+          {authenticated ? (
+            <button
+              onClick={logout}
+              className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
+            >
+              {user?.wallet?.address
+                ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`
+                : "Disconnect"}
+            </button>
+          ) : (
+            <button
+              onClick={login}
+              className="text-[10px] text-hl-accent hover:text-hl-accent/70 transition-colors uppercase tracking-wider cursor-pointer"
+            >
+              Connect Wallet
+            </button>
+          )}
         </div>
       </header>
 
