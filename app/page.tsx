@@ -11,6 +11,8 @@ import { AmountInput } from "@/components/amount-input";
 import { RoutePreview } from "@/components/route-preview";
 import { PriceEstimate } from "@/components/price-estimate";
 import { WarningBanner } from "@/components/warning-banner";
+import { SpotPrices } from "@/components/spot-prices";
+import { SpotTicker } from "@/components/spot-ticker";
 
 export default function AssetRouter() {
   const [tokenA, setTokenA] = useState<Token | null>(null);
@@ -90,7 +92,7 @@ export default function AssetRouter() {
 
       {/* Header */}
       <header className="relative z-10 border-b border-hl-border px-6 py-3">
-        <div className="max-w-[600px] mx-auto flex items-center justify-between">
+        <div className="max-w-[900px] mx-auto flex items-center justify-between">
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-medium text-hl-text">
               Asset Router
@@ -119,7 +121,20 @@ export default function AssetRouter() {
         </div>
       </header>
 
-      <main className="relative z-10 max-w-[600px] mx-auto px-6 py-8">
+      {/* Live price ticker */}
+      <SpotTicker />
+
+      <div className="relative z-10 max-w-[900px] mx-auto px-6 py-8 flex gap-6">
+        {/* Sidebar — desktop only */}
+        <aside className="hidden lg:block w-[260px] shrink-0">
+          <div className="sticky top-8">
+            <Panel>
+              <SpotPrices />
+            </Panel>
+          </div>
+        </aside>
+
+      <main className="min-w-0 flex-1 max-w-[600px]">
         {/* Balances */}
         {authenticated && balances && balances.length > 0 && (
           <div className="mb-4">
@@ -263,6 +278,7 @@ export default function AssetRouter() {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 }

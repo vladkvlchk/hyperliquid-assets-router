@@ -43,6 +43,15 @@ body {
   color: var(--color-hl-bg);
 }
 
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-ticker {
+  animation: ticker 60s linear infinite;
+}
+
 /* Video page palette — black, blue, white to match the hero video */
 .theme-video {
   --color-hl-bg: #08080f;
