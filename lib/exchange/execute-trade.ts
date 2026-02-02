@@ -21,6 +21,24 @@ function toSpotName(displaySymbol: string): string {
 }
 
 const SLIPPAGE = 0.01; // 1%
+const PRICE_SIG_FIGS = 5; // Hyperliquid requires prices with at most 5 significant figures
+
+/**
+ * Round a price to Hyperliquid's tick size (5 significant figures).
+ * Buy → ceil (willing to pay slightly more for guaranteed fill)
+ * Sell → floor (willing to accept slightly less for guaranteed fill)
+ */
+function roundPrice(price: number, side: TradeSide): number {
+  if (price <= 0) return 0;
+  const d = Math.floor(Math.log10(price)) + 1;
+  const power = PRICE_SIG_FIGS - d;
+  const magnitude = Math.pow(10, power);
+  const rounded =
+    side === "buy"
+      ? Math.ceil(price * magnitude) / magnitude
+      : Math.floor(price * magnitude) / magnitude;
+  return parseFloat(rounded.toFixed(8));
+}
 
 export interface TradeParams {
   fromSymbol: string;
@@ -129,11 +147,11 @@ export async function executeTrade(
   if (resolved.side === "sell") {
     // Selling base token: user provides base amount
     size = amount;
-    price = midPx * (1 - SLIPPAGE); // Sell at slightly worse price for guaranteed fill
+    price = roundPrice(midPx * (1 - SLIPPAGE), "sell");
   } else {
     // Buying base token: user provides quote amount, convert to base size
     size = amount / midPx;
-    price = midPx * (1 + SLIPPAGE); // Buy at slightly worse price for guaranteed fill
+    price = roundPrice(midPx * (1 + SLIPPAGE), "buy");
   }
 
   // Round size to the pair's szDecimals
