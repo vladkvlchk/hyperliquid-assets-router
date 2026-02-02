@@ -14,6 +14,7 @@ import { PriceEstimate } from "@/components/price-estimate";
 import { WarningBanner } from "@/components/warning-banner";
 import { SpotPrices } from "@/components/spot-prices";
 import { SpotTicker } from "@/components/spot-ticker";
+import { useSpotPrices } from "@/lib/state/use-spot-prices";
 
 export default function AssetRouter() {
   const [tokenA, setTokenA] = useState<Token | null>(null);
@@ -25,7 +26,15 @@ export default function AssetRouter() {
 
   const { login, logout, authenticated, user } = usePrivy();
   const { data: balances } = useBalances(user?.wallet?.address);
+  const { data: spotPrices } = useSpotPrices();
   const { state, discoverRoute, reset } = useRouteMachine();
+
+  const availableTokens = useMemo(() => {
+    if (!spotPrices) return undefined;
+    return spotPrices.map(
+      (p) => TOKENS[p.pair] ?? { symbol: p.pair, name: p.pair, decimals: 4 },
+    );
+  }, [spotPrices]);
 
   const heldTokens = useMemo(() => {
     if (!balances) return undefined;
@@ -42,7 +51,7 @@ export default function AssetRouter() {
 
   const parsedAmount = parseFloat(amount) || 0;
   const insufficientBalance =
-    authenticated && parsedAmount > 0 && maxAmount !== undefined && parsedAmount > parseFloat(maxAmount);
+    authenticated && tokenA && parsedAmount > 0 && parsedAmount > parseFloat(maxAmount ?? "0");
 
   // Unmute on first user interaction — browsers require a user gesture before allowing audio
   useEffect(() => {
@@ -218,6 +227,7 @@ export default function AssetRouter() {
                     reset();
                   }}
                   exclude={tokenA?.symbol}
+                  tokens={availableTokens}
                 />
               </div>
             </div>

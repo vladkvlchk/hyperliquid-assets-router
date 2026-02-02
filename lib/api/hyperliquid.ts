@@ -75,18 +75,21 @@ export async function fetchSpotPrices(): Promise<SpotPrice[]> {
     return a.name.localeCompare(b.name);
   });
 
-  const top = assets.slice(0, 25);
-
-  // Fetch 24h candles in parallel
+  // Fetch 24h candles for top 25 assets (avoid excessive API calls)
+  const top25 = assets.slice(0, 25);
   const candleResults = await Promise.all(
-    top.map((a) => fetchCandles(a.name)),
+    top25.map((a) => fetchCandles(a.name)),
   );
 
-  return top
-    .map((a, i) => {
-      const candles = candleResults[i];
-      const open24h = candles.length ? parseFloat(candles[0].o) : 0;
-      const volume24h = candles.reduce((sum, c) => sum + parseFloat(c.v), 0);
+  const candleData = new Map(
+    top25.map((a, i) => [a.name, candleResults[i]]),
+  );
+
+  return assets
+    .map((a) => {
+      const candles = candleData.get(a.name);
+      const open24h = candles?.length ? parseFloat(candles[0].o) : 0;
+      const volume24h = candles?.reduce((sum, c) => sum + parseFloat(c.v), 0) ?? 0;
 
       return {
         pair: a.name,
