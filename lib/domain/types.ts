@@ -72,27 +72,6 @@ export interface SpotBalance {
   entryNtl: string;
 }
 
-export interface SpotAssetCtx {
-  coin: string;
-  midPx: string;
-  markPx: string;
-  prevDayPx: string;
-  dayNtlVlm: string;
-}
-
-export interface SpotMetaToken {
-  name: string;
-  index: number;
-  isCanonical: boolean;
-}
-
-export interface SpotMetaUniverse {
-  tokens: [number, number];
-  name: string;
-  index: number;
-  isCanonical: boolean;
-}
-
 export interface SpotPrice {
   pair: string;
   midPx: number;

@@ -1,20 +1,7 @@
-import {
-  SpotBalance,
-  SpotPrice,
-  SpotAssetCtx,
-  SpotMetaToken,
-  SpotMetaUniverse,
-} from "@/lib/domain/types";
+import { SpotBalance, SpotPrice } from "@/lib/domain/types";
 import { TOKENS } from "@/lib/domain/tokens";
 
 const API_URL = "https://api.hyperliquid.xyz/info";
-
-/** Map Hyperliquid spot symbols to friendly display names */
-const DISPLAY_ALIAS: Record<string, string> = {
-  UBTC: "BTC",
-  UETH: "ETH",
-  USOL: "SOL",
-};
 
 export async function fetchSpotBalances(
   address: string,
@@ -34,54 +21,81 @@ export async function fetchSpotBalances(
   return data.balances as SpotBalance[];
 }
 
-export async function fetchSpotPrices(): Promise<SpotPrice[]> {
+interface Candle {
+  o: string;
+  v: string;
+}
+
+async function fetchAllMids(): Promise<Record<string, string>> {
   const res = await fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "spotMetaAndAssetCtxs" }),
+    body: JSON.stringify({ type: "allMids", dex: "" }),
+  });
+  if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
+  return res.json();
+}
+
+async function fetchCandles(coin: string): Promise<Candle[]> {
+  const now = Date.now();
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "candleSnapshot",
+      req: {
+        coin,
+        interval: "1h",
+        startTime: now - 86_400_000,
+        endTime: now,
+      },
+    }),
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchSpotPrices(): Promise<SpotPrice[]> {
+  const mids = await fetchAllMids();
+
+  // Filter to named assets (skip @N spot indices)
+  const assets = Object.entries(mids)
+    .filter(([name]) => !name.startsWith("@"))
+    .map(([name, px]) => ({ name, midPx: parseFloat(px) }))
+    .filter((a) => a.midPx > 0);
+
+  // Prioritise known tokens, then sort alphabetically for stable order
+  assets.sort((a, b) => {
+    const aKnown = a.name in TOKENS ? 1 : 0;
+    const bKnown = b.name in TOKENS ? 1 : 0;
+    if (aKnown !== bKnown) return bKnown - aKnown;
+    return a.name.localeCompare(b.name);
   });
 
-  if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
+  const top = assets.slice(0, 25);
 
-  const [meta, ctxs]: [
-    { tokens: SpotMetaToken[]; universe: SpotMetaUniverse[] },
-    SpotAssetCtx[],
-  ] = await res.json();
+  // Fetch 24h candles in parallel
+  const candleResults = await Promise.all(
+    top.map((a) => fetchCandles(a.name)),
+  );
 
-  const tokenName = new Map(meta.tokens.map((t) => [t.index, t.name]));
-
-  return meta.universe
-    .map((pair, i) => {
-      const ctx = ctxs[i];
-      if (!ctx) return null;
-
-      const mid = parseFloat(ctx.midPx);
-      const prev = parseFloat(ctx.prevDayPx);
-      const vol = parseFloat(ctx.dayNtlVlm);
-
-      if (!mid || !prev) return null;
-
-      const rawBase = tokenName.get(pair.tokens[0]) ?? `@${pair.tokens[0]}`;
-      const rawQuote = tokenName.get(pair.tokens[1]) ?? `@${pair.tokens[1]}`;
-      const base = DISPLAY_ALIAS[rawBase] ?? rawBase;
-      const quote = DISPLAY_ALIAS[rawQuote] ?? rawQuote;
+  return top
+    .map((a, i) => {
+      const candles = candleResults[i];
+      const open24h = candles.length ? parseFloat(candles[0].o) : 0;
+      const volume24h = candles.reduce((sum, c) => sum + parseFloat(c.v), 0);
 
       return {
-        pair: `${base}/${quote}`,
-        midPx: mid,
-        prevDayPx: prev,
-        change24h: ((mid - prev) / prev) * 100,
-        volume24h: vol,
+        pair: a.name,
+        midPx: a.midPx,
+        prevDayPx: open24h,
+        change24h: open24h ? ((a.midPx - open24h) / open24h) * 100 : 0,
+        volume24h,
       } satisfies SpotPrice;
     })
-    .filter((p): p is SpotPrice => {
-      if (!p) return false;
-      const base = p.pair.split("/")[0];
-      return base in TOKENS || p.volume24h > 0;
-    })
     .sort((a, b) => {
-      const aKnown = a.pair.split("/")[0] in TOKENS ? 1 : 0;
-      const bKnown = b.pair.split("/")[0] in TOKENS ? 1 : 0;
+      const aKnown = a.pair in TOKENS ? 1 : 0;
+      const bKnown = b.pair in TOKENS ? 1 : 0;
       if (aKnown !== bKnown) return bKnown - aKnown;
       return b.volume24h - a.volume24h;
     });
