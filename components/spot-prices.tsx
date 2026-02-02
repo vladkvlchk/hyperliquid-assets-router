@@ -14,7 +14,7 @@ function formatVolume(vol: number): string {
   return "$0";
 }
 
-export function SpotPrices() {
+export function SpotPrices({ onSelect }: { onSelect?: (name: string) => void }) {
   const { data: prices, isLoading } = useSpotPrices();
 
   if (isLoading) {
@@ -35,7 +35,8 @@ export function SpotPrices() {
       {prices.slice(0, 25).map((p) => (
         <div
           key={p.pair}
-          className="py-1.5 border-b border-hl-border/50 last:border-0"
+          onClick={() => onSelect?.(p.pair)}
+          className={`py-1.5 border-b border-hl-border/50 last:border-0${onSelect ? " cursor-pointer hover:bg-hl-hover/50 -mx-1 px-1 rounded" : ""}`}
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-hl-text truncate mr-2">

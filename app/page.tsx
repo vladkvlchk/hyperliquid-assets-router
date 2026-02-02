@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Token } from "@/lib/domain/types";
+import { TOKENS } from "@/lib/domain/tokens";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
 import { useBalances } from "@/lib/state/use-balances";
 import { Panel, SectionLabel } from "@/components/panel";
@@ -26,7 +27,22 @@ export default function AssetRouter() {
   const { data: balances } = useBalances(user?.wallet?.address);
   const { state, discoverRoute, reset } = useRouteMachine();
 
+  const heldTokens = useMemo(() => {
+    if (!balances) return undefined;
+    return balances
+      .filter((b) => parseFloat(b.total) > 0)
+      .map((b) => TOKENS[b.coin] ?? { symbol: b.coin, name: b.coin, decimals: 4 });
+  }, [balances]);
+
+  const maxAmount = useMemo(() => {
+    if (!balances || !tokenA) return undefined;
+    const b = balances.find((b) => b.coin === tokenA.symbol);
+    return b ? b.total : undefined;
+  }, [balances, tokenA]);
+
   const parsedAmount = parseFloat(amount) || 0;
+  const insufficientBalance =
+    authenticated && parsedAmount > 0 && maxAmount !== undefined && parsedAmount > parseFloat(maxAmount);
 
   // Unmute on first user interaction — browsers require a user gesture before allowing audio
   useEffect(() => {
@@ -55,6 +71,13 @@ export default function AssetRouter() {
 
   function handleDiscover() {
     discoverRoute(tokenA, tokenB, parsedAmount);
+  }
+
+  function selectToken(symbol: string, target: "from" | "to") {
+    const token = TOKENS[symbol] ?? { symbol, name: symbol, decimals: 4 };
+    if (target === "from") setTokenA(token);
+    else setTokenB(token);
+    reset();
   }
 
   function handleSwapTokens() {
@@ -122,14 +145,14 @@ export default function AssetRouter() {
       </header>
 
       {/* Live price ticker */}
-      <SpotTicker />
+      <SpotTicker onSelect={(name) => selectToken(name, "to")} />
 
       <div className="relative z-10 max-w-[900px] mx-auto px-6 py-8 flex gap-6">
         {/* Sidebar — desktop only */}
         <aside className="hidden lg:block w-[260px] shrink-0">
           <div className="sticky top-8">
             <Panel>
-              <SpotPrices />
+              <SpotPrices onSelect={(name) => selectToken(name, "to")} />
             </Panel>
           </div>
         </aside>
@@ -144,14 +167,18 @@ export default function AssetRouter() {
                 {balances
                   .filter((b) => parseFloat(b.total) > 0)
                   .map((b) => (
-                    <span key={b.coin} className="text-xs text-hl-muted">
+                    <button
+                      key={b.coin}
+                      onClick={() => selectToken(b.coin, "from")}
+                      className="text-xs text-hl-muted hover:text-hl-accent transition-colors cursor-pointer"
+                    >
                       {b.coin}{" "}
                       <span className="text-hl-text">
                         {parseFloat(b.total).toLocaleString(undefined, {
                           maximumFractionDigits: 4,
                         })}
                       </span>
-                    </span>
+                    </button>
                   ))}
               </div>
             </Panel>
@@ -161,36 +188,39 @@ export default function AssetRouter() {
         {/* Input Panel */}
         <Panel>
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3">
-              <TokenSelect
-                label="From"
-                value={tokenA}
-                onChange={(t) => {
-                  setTokenA(t);
-                  reset();
-                }}
-                exclude={tokenB?.symbol}
-              />
-              <TokenSelect
-                label="To"
-                value={tokenB}
-                onChange={(t) => {
-                  setTokenB(t);
-                  reset();
-                }}
-                exclude={tokenA?.symbol}
-              />
-            </div>
-
-            {/* Swap direction button */}
-            {tokenA && tokenB && (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <TokenSelect
+                  label="From"
+                  value={tokenA}
+                  onChange={(t) => {
+                    setTokenA(t);
+                    reset();
+                  }}
+                  exclude={tokenB?.symbol}
+                  tokens={heldTokens}
+                />
+              </div>
               <button
                 onClick={handleSwapTokens}
-                className="self-center text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
+                className="mb-0.5 px-1.5 py-3 text-hl-text-dim hover:text-hl-accent transition-colors cursor-pointer shrink-0"
               >
-                [swap direction]
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
               </button>
-            )}
+              <div className="flex-1">
+                <TokenSelect
+                  label="To"
+                  value={tokenB}
+                  onChange={(t) => {
+                    setTokenB(t);
+                    reset();
+                  }}
+                  exclude={tokenA?.symbol}
+                />
+              </div>
+            </div>
 
             <AmountInput
               value={amount}
@@ -199,7 +229,14 @@ export default function AssetRouter() {
                 reset();
               }}
               tokenSymbol={tokenA?.symbol}
+              maxAmount={maxAmount}
             />
+
+            {insufficientBalance && (
+              <div className="text-[11px] text-hl-warn">
+                Insufficient balance
+              </div>
+            )}
 
             <button
               onClick={handleDiscover}

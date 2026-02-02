@@ -14,7 +14,7 @@ function formatVolume(vol: number): string {
   return "$0";
 }
 
-export function SpotTicker() {
+export function SpotTicker({ onSelect }: { onSelect?: (name: string) => void }) {
   const { data: prices } = useSpotPrices();
 
   if (!prices?.length) return null;
@@ -29,7 +29,8 @@ export function SpotTicker() {
             {items.map((p) => (
               <div
                 key={`${copy}-${p.pair}`}
-                className="inline-flex items-center gap-2 px-4 py-1.5 border-r border-hl-border/30"
+                onClick={() => onSelect?.(p.pair)}
+                className={`inline-flex items-center gap-2 px-4 py-1.5 border-r border-hl-border/30${onSelect ? " cursor-pointer hover:bg-hl-hover/50" : ""}`}
               >
                 <span className="text-[11px] text-hl-text font-medium">
                   {p.pair}
