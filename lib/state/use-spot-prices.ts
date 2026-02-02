@@ -5,6 +5,7 @@ export function useSpotPrices() {
   return useQuery({
     queryKey: ["spotPrices"],
     queryFn: fetchSpotPrices,
-    refetchInterval: 10_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 }

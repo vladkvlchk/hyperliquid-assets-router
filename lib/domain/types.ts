@@ -79,3 +79,67 @@ export interface SpotPrice {
   change24h: number;
   volume24h: number;
 }
+
+/* ── Spot metadata (from spotMeta endpoint) ── */
+
+export interface SpotMetaToken {
+  name: string;
+  szDecimals: number;
+  weiDecimals: number;
+  index: number;
+  tokenId: string;
+  isCanonical: boolean;
+}
+
+export interface SpotMetaPair {
+  name: string;
+  tokens: [number, number]; // [base_token_idx, quote_token_idx]
+  index: number;
+  isCanonical: boolean;
+}
+
+export interface SpotMeta {
+  tokens: SpotMetaToken[];
+  universe: SpotMetaPair[];
+}
+
+/* ── Order wire format (exchange endpoint) ── */
+
+export interface OrderWire {
+  a: number;
+  b: boolean;
+  p: string;
+  s: string;
+  r: boolean;
+  t: { limit: { tif: "Ioc" | "Gtc" | "Alo" } };
+}
+
+export interface OrderAction {
+  type: "order";
+  orders: OrderWire[];
+  grouping: "na";
+}
+
+/* ── L2 orderbook ── */
+
+export interface L2Level {
+  px: string;
+  sz: string;
+  n: number;
+}
+
+export interface L2Book {
+  coin: string;
+  time: number;
+  levels: [L2Level[], L2Level[]]; // [bids, asks]
+}
+
+/* ── Trade result ── */
+
+export interface TradeResult {
+  status: "filled" | "resting" | "error";
+  totalSz?: string;
+  avgPx?: string;
+  oid?: number;
+  error?: string;
+}

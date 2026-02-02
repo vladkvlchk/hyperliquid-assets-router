@@ -1,12 +1,20 @@
-import { SpotBalance, SpotPrice } from "@/lib/domain/types";
+import {
+  SpotBalance,
+  SpotPrice,
+  SpotMeta,
+  L2Book,
+  OrderAction,
+  TradeResult,
+} from "@/lib/domain/types";
 import { TOKENS, displayName } from "@/lib/domain/tokens";
 
-const API_URL = "https://api.hyperliquid.xyz/info";
+const INFO_URL = "https://api.hyperliquid.xyz/info";
+const EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
 
 export async function fetchSpotBalances(
   address: string,
 ): Promise<SpotBalance[]> {
-  const res = await fetch(API_URL, {
+  const res = await fetch(INFO_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -30,7 +38,7 @@ interface Candle {
 }
 
 async function fetchAllMids(): Promise<Record<string, string>> {
-  const res = await fetch(API_URL, {
+  const res = await fetch(INFO_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type: "allMids", dex: "" }),
@@ -41,7 +49,7 @@ async function fetchAllMids(): Promise<Record<string, string>> {
 
 async function fetchCandles(coin: string): Promise<Candle[]> {
   const now = Date.now();
-  const res = await fetch(API_URL, {
+  const res = await fetch(INFO_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -75,14 +83,17 @@ export async function fetchSpotPrices(): Promise<SpotPrice[]> {
     return a.name.localeCompare(b.name);
   });
 
-  // Fetch 24h candles for top 25 assets (avoid excessive API calls)
-  const top25 = assets.slice(0, 25);
-  const candleResults = await Promise.all(
-    top25.map((a) => fetchCandles(a.name)),
-  );
+  // Fetch 24h candles in batches of 5 to avoid rate limits
+  const top = assets.slice(0, 15);
+  const candleResults: Candle[][] = [];
+  for (let i = 0; i < top.length; i += 5) {
+    const batch = top.slice(i, i + 5);
+    const results = await Promise.all(batch.map((a) => fetchCandles(a.name)));
+    candleResults.push(...results);
+  }
 
   const candleData = new Map(
-    top25.map((a, i) => [a.name, candleResults[i]]),
+    top.map((a, i) => [a.name, candleResults[i]]),
   );
 
   return assets
@@ -105,4 +116,92 @@ export async function fetchSpotPrices(): Promise<SpotPrice[]> {
       if (aKnown !== bKnown) return bKnown - aKnown;
       return b.volume24h - a.volume24h;
     });
+}
+
+/* ── Spot metadata (asset indices for order placement) ── */
+
+export async function fetchSpotMeta(): Promise<SpotMeta> {
+  const res = await fetch(INFO_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "spotMeta" }),
+  });
+  if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
+  return res.json();
+}
+
+/* ── L2 orderbook ── */
+
+export async function fetchL2Book(coin: string): Promise<L2Book> {
+  const res = await fetch(INFO_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "l2Book", coin }),
+  });
+  if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
+  return res.json();
+}
+
+/* ── Exchange endpoint (order submission) ── */
+
+/** Split a 65-byte hex signature into { r, s, v } as Hyperliquid expects */
+function splitSig(sig: string): { r: string; s: string; v: number } {
+  const raw = sig.startsWith("0x") ? sig.slice(2) : sig;
+  return {
+    r: "0x" + raw.slice(0, 64),
+    s: "0x" + raw.slice(64, 128),
+    v: parseInt(raw.slice(128, 130), 16),
+  };
+}
+
+export async function submitOrder(
+  action: OrderAction,
+  nonce: number,
+  signature: `0x${string}`,
+): Promise<TradeResult> {
+  const res = await fetch(EXCHANGE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      nonce,
+      signature: splitSig(signature),
+      vaultAddress: null,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    return { status: "error", error: `HTTP ${res.status}: ${text}` };
+  }
+
+  const data = await res.json();
+
+  if (data.status !== "ok") {
+    return { status: "error", error: data.response ?? "Unknown error" };
+  }
+
+  const orderStatus = data.response?.data?.statuses?.[0];
+  if (!orderStatus) {
+    return { status: "error", error: "No order status in response" };
+  }
+
+  if (orderStatus.error) {
+    return { status: "error", error: orderStatus.error };
+  }
+
+  if (orderStatus.filled) {
+    return {
+      status: "filled",
+      totalSz: orderStatus.filled.totalSz,
+      avgPx: orderStatus.filled.avgPx,
+      oid: orderStatus.filled.oid,
+    };
+  }
+
+  if (orderStatus.resting) {
+    return { status: "resting", oid: orderStatus.resting.oid };
+  }
+
+  return { status: "error", error: "Unexpected response format" };
 }

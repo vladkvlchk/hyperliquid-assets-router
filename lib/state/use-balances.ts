@@ -6,6 +6,7 @@ export function useBalances(address: string | undefined) {
     queryKey: ["spotBalances", address],
     queryFn: () => fetchSpotBalances(address!),
     enabled: !!address,
-    refetchInterval: 10_000,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
   });
 }

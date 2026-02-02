@@ -1,37 +1,48 @@
 "use client";
 
 import { useReducer, useCallback } from "react";
-import { Token, Route } from "@/lib/domain/types";
+import { Token, Route, TradeResult, SpotMeta } from "@/lib/domain/types";
 import { findRoute } from "@/lib/routing/pathfinder";
 import { SPOT_PAIRS } from "@/lib/domain/pairs";
 import { MOCK_ORDERBOOKS } from "@/lib/data/mock-orderbooks";
+import { executeTrade } from "@/lib/exchange/execute-trade";
+import type { Hex } from "viem";
 
 /**
- * Explicit state machine for the route discovery flow.
+ * Explicit state machine for route discovery + trade execution.
  *
  * States:
- *   idle            → User hasn't initiated a search
- *   discovering     → Route computation in progress
- *   route_found     → Valid route discovered
- *   no_route        → No path exists between selected tokens
- *   error           → Something went wrong
+ *   idle              → User hasn't initiated a search
+ *   discovering       → Route computation in progress
+ *   route_found       → Valid route discovered
+ *   no_route          → No path exists between selected tokens
+ *   error             → Something went wrong
+ *   executing         → Trade signing + submission in progress
+ *   executed          → Trade completed successfully
+ *   execution_error   → Trade failed
  *
  * No implicit or magical state — every transition is an explicit dispatch.
  */
 
-type RouteState =
+export type RouteState =
   | { status: "idle" }
   | { status: "discovering" }
   | { status: "route_found"; route: Route }
   | { status: "no_route"; from: Token; to: Token }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string }
+  | { status: "executing"; route: Route }
+  | { status: "executed"; route: Route; result: TradeResult }
+  | { status: "execution_error"; route: Route; message: string };
 
 type RouteAction =
   | { type: "DISCOVER" }
   | { type: "ROUTE_FOUND"; route: Route }
   | { type: "NO_ROUTE"; from: Token; to: Token }
   | { type: "ERROR"; message: string }
-  | { type: "RESET" };
+  | { type: "RESET" }
+  | { type: "EXECUTE"; route: Route }
+  | { type: "EXECUTED"; route: Route; result: TradeResult }
+  | { type: "EXECUTION_ERROR"; route: Route; message: string };
 
 function routeReducer(_state: RouteState, action: RouteAction): RouteState {
   switch (action.type) {
@@ -45,6 +56,16 @@ function routeReducer(_state: RouteState, action: RouteAction): RouteState {
       return { status: "error", message: action.message };
     case "RESET":
       return { status: "idle" };
+    case "EXECUTE":
+      return { status: "executing", route: action.route };
+    case "EXECUTED":
+      return { status: "executed", route: action.route, result: action.result };
+    case "EXECUTION_ERROR":
+      return {
+        status: "execution_error",
+        route: action.route,
+        message: action.message,
+      };
   }
 }
 
@@ -76,11 +97,15 @@ export function useRouteMachine() {
 
       dispatch({ type: "DISCOVER" });
 
-      // Simulate async delay — in production this is an API call.
-      // The delay keeps the UI honest about loading states.
       setTimeout(() => {
         try {
-          const route = findRoute(from, to, amount, SPOT_PAIRS, MOCK_ORDERBOOKS);
+          const route = findRoute(
+            from,
+            to,
+            amount,
+            SPOT_PAIRS,
+            MOCK_ORDERBOOKS,
+          );
           if (route) {
             dispatch({ type: "ROUTE_FOUND", route });
           } else {
@@ -97,7 +122,54 @@ export function useRouteMachine() {
     [],
   );
 
+  const executeRoute = useCallback(
+    async (
+      route: Route,
+      amount: number,
+      spotMeta: SpotMeta,
+      agentPrivateKey: Hex,
+    ) => {
+      if (route.hops.length !== 1) {
+        dispatch({
+          type: "EXECUTION_ERROR",
+          route,
+          message: "Only single-hop (direct pair) trades are supported",
+        });
+        return;
+      }
+
+      dispatch({ type: "EXECUTE", route });
+
+      try {
+        const result = await executeTrade({
+          fromSymbol: route.from.symbol,
+          toSymbol: route.to.symbol,
+          amount,
+          spotMeta,
+          agentPrivateKey,
+        });
+
+        if (result.status === "error") {
+          dispatch({
+            type: "EXECUTION_ERROR",
+            route,
+            message: result.error ?? "Trade failed",
+          });
+        } else {
+          dispatch({ type: "EXECUTED", route, result });
+        }
+      } catch (e) {
+        dispatch({
+          type: "EXECUTION_ERROR",
+          route,
+          message: e instanceof Error ? e.message : "Trade failed",
+        });
+      }
+    },
+    [],
+  );
+
   const reset = useCallback(() => dispatch({ type: "RESET" }), []);
 
-  return { state, discoverRoute, reset };
+  return { state, discoverRoute, executeRoute, reset };
 }

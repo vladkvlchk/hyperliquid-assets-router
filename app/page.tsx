@@ -6,12 +6,15 @@ import { Token } from "@/lib/domain/types";
 import { TOKENS } from "@/lib/domain/tokens";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
 import { useBalances } from "@/lib/state/use-balances";
+import { useSpotMeta } from "@/lib/state/use-spot-meta";
+import { useAgent } from "@/lib/state/use-agent";
 import { Panel, SectionLabel } from "@/components/panel";
 import { TokenSelect } from "@/components/token-select";
 import { AmountInput } from "@/components/amount-input";
 import { RoutePreview } from "@/components/route-preview";
 import { PriceEstimate } from "@/components/price-estimate";
 import { WarningBanner } from "@/components/warning-banner";
+import { TradeResultDisplay, TradeErrorDisplay } from "@/components/trade-result";
 import { SpotPrices } from "@/components/spot-prices";
 import { SpotTicker } from "@/components/spot-ticker";
 import { useSpotPrices } from "@/lib/state/use-spot-prices";
@@ -27,7 +30,9 @@ export default function AssetRouter() {
   const { login, logout, authenticated, user } = usePrivy();
   const { data: balances } = useBalances(user?.wallet?.address);
   const { data: spotPrices } = useSpotPrices();
-  const { state, discoverRoute, reset } = useRouteMachine();
+  const { data: spotMeta } = useSpotMeta();
+  const { state, discoverRoute, executeRoute, reset } = useRouteMachine();
+  const { agent, isApproving, approveError, approve } = useAgent(user?.wallet?.address);
 
   const availableTokens = useMemo(() => {
     if (!spotPrices) return undefined;
@@ -80,6 +85,26 @@ export default function AssetRouter() {
 
   function handleDiscover() {
     discoverRoute(tokenA, tokenB, parsedAmount);
+  }
+
+  async function handleApproveAgent() {
+    await approve();
+  }
+
+  async function handleExecute() {
+    if (
+      state.status !== "route_found" ||
+      !spotMeta ||
+      !agent
+    )
+      return;
+
+    executeRoute(
+      state.route,
+      parsedAmount,
+      spotMeta,
+      agent.privateKey,
+    );
   }
 
   function selectToken(symbol: string, target: "from" | "to") {
@@ -273,7 +298,7 @@ export default function AssetRouter() {
 
         {/* Results */}
         <div className="mt-4 flex flex-col gap-3">
-          {/* Route found */}
+          {/* Route found — show preview + execute button */}
           {state.status === "route_found" && (
             <>
               <Panel>
@@ -287,6 +312,97 @@ export default function AssetRouter() {
               />
 
               <WarningBanner warnings={state.route.warnings} />
+
+              {/* Execute button — single-hop + wallet connected */}
+              {state.route.hops.length === 1 && authenticated ? (
+                !agent ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={handleApproveAgent}
+                      disabled={isApproving}
+                      className="w-full py-2 text-sm font-medium border border-hl-accent/30 text-hl-accent
+                                 hover:bg-hl-accent/10 transition-colors cursor-pointer
+                                 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {isApproving ? "Approving..." : "Approve Trading Agent"}
+                    </button>
+                    <div className="text-[10px] text-hl-text-dim text-center">
+                      One-time wallet signature to authorize trading
+                    </div>
+                    {approveError && (
+                      <div className="text-[10px] text-hl-error text-center">
+                        {approveError}
+                      </div>
+                    )}
+                  </div>
+                ) : spotMeta ? (
+                  <button
+                    onClick={handleExecute}
+                    className="w-full py-2 text-sm font-medium border border-green-400/30 text-green-400
+                               hover:bg-green-400/10 transition-colors cursor-pointer"
+                  >
+                    Execute Trade
+                  </button>
+                ) : null
+              ) : state.route.hops.length > 1 ? (
+                <div className="text-[10px] text-hl-text-dim text-center py-2">
+                  Multi-hop execution not available yet — direct pairs only
+                </div>
+              ) : !authenticated ? (
+                <button
+                  onClick={login}
+                  className="w-full py-2 text-sm font-medium border border-hl-accent/30 text-hl-accent
+                             hover:bg-hl-accent/10 transition-colors cursor-pointer"
+                >
+                  Connect Wallet to Trade
+                </button>
+              ) : null}
+            </>
+          )}
+
+          {/* Executing — signing + submitting */}
+          {state.status === "executing" && (
+            <>
+              <Panel>
+                <SectionLabel>Route</SectionLabel>
+                <RoutePreview route={state.route} />
+              </Panel>
+              <Panel>
+                <div className="text-xs text-hl-muted animate-pulse">
+                  Signing &amp; submitting order...
+                </div>
+              </Panel>
+            </>
+          )}
+
+          {/* Executed — show result */}
+          {state.status === "executed" && (
+            <>
+              <Panel>
+                <SectionLabel>Route</SectionLabel>
+                <RoutePreview route={state.route} />
+              </Panel>
+              <TradeResultDisplay
+                result={state.result}
+                fromSymbol={state.route.from.symbol}
+                toSymbol={state.route.to.symbol}
+                onReset={reset}
+              />
+            </>
+          )}
+
+          {/* Execution error */}
+          {state.status === "execution_error" && (
+            <>
+              <Panel>
+                <SectionLabel>Route</SectionLabel>
+                <RoutePreview route={state.route} />
+              </Panel>
+              <TradeErrorDisplay
+                message={state.message}
+                onRetry={handleExecute}
+                onReset={reset}
+              />
             </>
           )}
 
@@ -320,12 +436,12 @@ export default function AssetRouter() {
         {/* Footer info */}
         <div className="mt-8 border-t border-hl-border pt-4 text-[10px] text-hl-text-dim space-y-1">
           <div>
-            Data: mock orderbooks &middot; Routing: BFS shortest path &middot;
-            Estimation: orderbook walk
+            Prices: Hyperliquid API &middot; Routing: BFS shortest path &middot;
+            Execution: IOC market orders
           </div>
           <div>
-            All prices are simulated. This is not connected to the Hyperliquid
-            exchange.
+            Direct pair trades execute on Hyperliquid mainnet.
+            Multi-hop routes are preview-only.
           </div>
         </div>
       </main>
