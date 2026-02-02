@@ -22,7 +22,7 @@ export function SpotTicker({ onSelect }: { onSelect?: (name: string) => void }) 
   const items = prices.slice(0, 25);
 
   return (
-    <div className="relative z-10 border-b border-hl-border overflow-hidden">
+    <div className="relative z-10 border-b border-hl-border/60 bg-hl-surface/30 backdrop-blur-xl overflow-hidden">
       <div className="flex animate-ticker whitespace-nowrap">
         {[0, 1].map((copy) => (
           <div key={copy} className="flex shrink-0">
@@ -30,7 +30,7 @@ export function SpotTicker({ onSelect }: { onSelect?: (name: string) => void }) 
               <div
                 key={`${copy}-${p.pair}`}
                 onClick={() => onSelect?.(p.pair)}
-                className={`inline-flex items-center gap-2 px-4 py-1.5 border-r border-hl-border/30${onSelect ? " cursor-pointer hover:bg-hl-hover/50" : ""}`}
+                className={`inline-flex items-center gap-2 px-4 py-1.5 ${onSelect ? " cursor-pointer hover:bg-hl-hover/50" : ""}`}
               >
                 <span className="text-[11px] text-hl-text font-medium">
                   {p.pair}

@@ -109,21 +109,25 @@ export default function AssetRouter() {
       >
         <source src="/lighter-3.1.mp4" type="video/mp4" />
       </video>
-      {/* Overlay so UI stays readable */}
-      <div className="fixed inset-0 z-0" />
+      {/* Subtle dark overlay for base readability */}
+      <div className="fixed inset-0 z-0 bg-black/30" />
 
       {/* Mute toggle */}
       <button
         onClick={toggleMute}
-        className="fixed bottom-4 right-4 z-50 px-2 py-1 text-[10px] uppercase tracking-wider
-                   border border-hl-border bg-hl-bg/70 text-hl-text-dim hover:text-hl-muted
-                   backdrop-blur-sm transition-colors cursor-pointer"
+        className="fixed bottom-4 right-4 z-50 p-2
+                   border border-hl-border/60 bg-hl-surface/40 text-hl-text-dim hover:text-hl-muted
+                   backdrop-blur-xl transition-colors cursor-pointer"
       >
-        {muted ? "unmute" : "mute"}
+        {muted ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M192,152V104a8,8,0,0,1,16,0v48a8,8,0,0,1-16,0Zm40-72a8,8,0,0,0-8,8v80a8,8,0,0,0,16,0V88A8,8,0,0,0,232,80ZM221.92,210.62a8,8,0,1,1-11.84,10.76L168,175.09V224a8,8,0,0,1-12.91,6.31L85.25,176H40a16,16,0,0,1-16-16V96A16,16,0,0,1,40,80H81.55L50.08,45.38A8,8,0,0,1,61.92,34.62ZM152,157.49,96.1,96H40v64H88a7.94,7.94,0,0,1,4.91,1.69L152,207.64ZM125.06,69.31l26.94-21v58.47a8,8,0,0,0,16,0V32a8,8,0,0,0-12.91-6.31l-39.85,31a8,8,0,0,0,9.82,12.63Z"></path></svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M163.51,24.81a8,8,0,0,0-8.42.88L85.25,80H40A16,16,0,0,0,24,96v64a16,16,0,0,0,16,16H85.25l69.84,54.31A8,8,0,0,0,168,224V32A8,8,0,0,0,163.51,24.81ZM152,207.64,92.91,161.69A7.94,7.94,0,0,0,88,160H40V96H88a7.94,7.94,0,0,0,4.91-1.69L152,48.36ZM208,104v48a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm32-16v80a8,8,0,0,1-16,0V88a8,8,0,0,1,16,0Z"></path></svg>
+        )}
       </button>
 
       {/* Header */}
-      <header className="relative z-10 border-b border-hl-border px-6 py-3">
+      <header className="relative z-10 border-b border-hl-border/60 bg-hl-surface/30 backdrop-blur-xl px-6 py-3">
         <div className="max-w-[900px] mx-auto flex items-center justify-between">
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-medium text-hl-text">

@@ -5,7 +5,7 @@ interface PanelProps {
 
 export function Panel({ children, className = "" }: PanelProps) {
   return (
-    <div className={`border border-hl-border bg-hl-surface p-4 ${className}`}>
+    <div className={`border border-hl-border/60 bg-hl-surface/40 backdrop-blur-xl p-4 ${className}`}>
       {children}
     </div>
   );

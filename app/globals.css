@@ -52,17 +52,17 @@ body {
   animation: ticker 60s linear infinite;
 }
 
-/* Video page palette — black, blue, white to match the hero video */
+/* Video page palette — translucent glassmorphism over the hero video */
 .theme-video {
-  --color-hl-bg: #08080f;
-  --color-hl-surface: #0e0e1a;
-  --color-hl-input: #0c0c16;
-  --color-hl-deep: #06060c;
-  --color-hl-hover: #16162a;
-  --color-hl-border: #1c1c30;
+  --color-hl-bg: rgba(8, 8, 15, 0.6);
+  --color-hl-surface: rgba(14, 14, 26, 0.45);
+  --color-hl-input: rgba(12, 12, 22, 0.5);
+  --color-hl-deep: rgba(6, 6, 12, 0.6);
+  --color-hl-hover: rgba(22, 22, 42, 0.5);
+  --color-hl-border: rgba(28, 28, 48, 0.6);
   --color-hl-border-hover: #2a2a48;
   --color-hl-text: #eeeef4;
-  --color-hl-text-dim: #4a4a68;
-  --color-hl-muted: #8888a8;
+  --color-hl-text-dim: #6a6a88;
+  --color-hl-muted: #9999b8;
   --color-hl-accent: #5b9cf5;
 }
