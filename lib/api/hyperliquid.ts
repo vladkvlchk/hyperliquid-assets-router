@@ -1,5 +1,5 @@
 import { SpotBalance, SpotPrice } from "@/lib/domain/types";
-import { TOKENS } from "@/lib/domain/tokens";
+import { TOKENS, displayName } from "@/lib/domain/tokens";
 
 const API_URL = "https://api.hyperliquid.xyz/info";
 
@@ -18,7 +18,10 @@ export async function fetchSpotBalances(
   if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
 
   const data = await res.json();
-  return data.balances as SpotBalance[];
+  return (data.balances as SpotBalance[]).map((b) => ({
+    ...b,
+    coin: displayName(b.coin),
+  }));
 }
 
 interface Candle {

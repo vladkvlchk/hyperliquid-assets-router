@@ -18,3 +18,14 @@ export const TOKENS: Record<string, Token> = {
 };
 
 export const TOKEN_LIST: Token[] = Object.values(TOKENS);
+
+/** Hyperliquid spot symbols → canonical display names */
+const SPOT_ALIASES: Record<string, string> = {
+  UBTC: "BTC",
+  UETH: "ETH",
+  USOL: "SOL",
+};
+
+export function displayName(coin: string): string {
+  return SPOT_ALIASES[coin] ?? coin;
+}
