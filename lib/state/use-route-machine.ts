@@ -1,11 +1,11 @@
 "use client";
 
 import { useReducer, useCallback } from "react";
-import { Token, Route, TradeResult, SpotMeta } from "@/lib/domain/types";
+import { Token, Route, TradeResult, SpotMeta, MultiHopResult } from "@/lib/domain/types";
 import { findRoute } from "@/lib/routing/pathfinder";
 import { SPOT_PAIRS } from "@/lib/domain/pairs";
 import { MOCK_ORDERBOOKS } from "@/lib/data/mock-orderbooks";
-import { executeTrade } from "@/lib/exchange/execute-trade";
+import { executeTrade, executeMultiHopTrade } from "@/lib/exchange/execute-trade";
 import type { Hex } from "viem";
 
 /**
@@ -30,8 +30,8 @@ export type RouteState =
   | { status: "route_found"; route: Route }
   | { status: "no_route"; from: Token; to: Token }
   | { status: "error"; message: string }
-  | { status: "executing"; route: Route }
-  | { status: "executed"; route: Route; result: TradeResult }
+  | { status: "executing"; route: Route; currentHop?: number }
+  | { status: "executed"; route: Route; result: TradeResult | MultiHopResult }
   | { status: "execution_error"; route: Route; message: string };
 
 type RouteAction =
@@ -41,7 +41,8 @@ type RouteAction =
   | { type: "ERROR"; message: string }
   | { type: "RESET" }
   | { type: "EXECUTE"; route: Route }
-  | { type: "EXECUTED"; route: Route; result: TradeResult }
+  | { type: "HOP_PROGRESS"; route: Route; currentHop: number }
+  | { type: "EXECUTED"; route: Route; result: TradeResult | MultiHopResult }
   | { type: "EXECUTION_ERROR"; route: Route; message: string };
 
 function routeReducer(_state: RouteState, action: RouteAction): RouteState {
@@ -58,6 +59,8 @@ function routeReducer(_state: RouteState, action: RouteAction): RouteState {
       return { status: "idle" };
     case "EXECUTE":
       return { status: "executing", route: action.route };
+    case "HOP_PROGRESS":
+      return { status: "executing", route: action.route, currentHop: action.currentHop };
     case "EXECUTED":
       return { status: "executed", route: action.route, result: action.result };
     case "EXECUTION_ERROR":
@@ -129,34 +132,55 @@ export function useRouteMachine() {
       spotMeta: SpotMeta,
       agentPrivateKey: Hex,
     ) => {
-      if (route.hops.length !== 1) {
-        dispatch({
-          type: "EXECUTION_ERROR",
-          route,
-          message: "Only single-hop (direct pair) trades are supported",
-        });
-        return;
-      }
-
       dispatch({ type: "EXECUTE", route });
 
       try {
-        const result = await executeTrade({
-          fromSymbol: route.from.symbol,
-          toSymbol: route.to.symbol,
-          amount,
-          spotMeta,
-          agentPrivateKey,
-        });
-
-        if (result.status === "error") {
-          dispatch({
-            type: "EXECUTION_ERROR",
-            route,
-            message: result.error ?? "Trade failed",
+        if (route.hops.length === 1) {
+          // Single-hop: direct trade
+          const result = await executeTrade({
+            fromSymbol: route.from.symbol,
+            toSymbol: route.to.symbol,
+            amount,
+            spotMeta,
+            agentPrivateKey,
           });
+
+          if (result.status === "error") {
+            dispatch({
+              type: "EXECUTION_ERROR",
+              route,
+              message: result.error ?? "Trade failed",
+            });
+          } else {
+            dispatch({ type: "EXECUTED", route, result });
+          }
         } else {
-          dispatch({ type: "EXECUTED", route, result });
+          // Multi-hop: sequential execution
+          const result = await executeMultiHopTrade({
+            hops: route.hops,
+            initialAmount: amount,
+            spotMeta,
+            agentPrivateKey,
+            onHopComplete: (hopIndex) => {
+              dispatch({ type: "HOP_PROGRESS", route, currentHop: hopIndex + 1 });
+            },
+          });
+
+          if (result.status === "error") {
+            dispatch({
+              type: "EXECUTION_ERROR",
+              route,
+              message: result.error ?? "Trade failed",
+            });
+          } else if (result.status === "partial") {
+            dispatch({
+              type: "EXECUTION_ERROR",
+              route,
+              message: `Partial execution: ${result.completedHops.length}/${route.hops.length} hops completed. ${result.error ?? ""}`,
+            });
+          } else {
+            dispatch({ type: "EXECUTED", route, result });
+          }
         }
       } catch (e) {
         dispatch({

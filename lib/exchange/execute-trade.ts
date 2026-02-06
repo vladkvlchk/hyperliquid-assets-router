@@ -4,6 +4,9 @@ import {
   OrderWire,
   TradeResult,
   TradeSide,
+  RouteHop,
+  MultiHopResult,
+  HopResult,
 } from "@/lib/domain/types";
 import { fetchL2Book, submitOrder } from "@/lib/api/hyperliquid";
 import { floatToWire, signL1Action } from "./signing";
@@ -193,4 +196,99 @@ export async function executeTrade(
 
   // 6. Submit
   return submitOrder(action, nonce, signature);
+}
+
+export interface MultiHopTradeParams {
+  hops: RouteHop[];
+  initialAmount: number;
+  spotMeta: SpotMeta;
+  agentPrivateKey: Hex;
+  onHopComplete?: (hopIndex: number, result: HopResult) => void;
+}
+
+/**
+ * Execute a multi-hop trade sequentially.
+ *
+ * Each hop uses the output of the previous hop as input.
+ * If any hop fails, execution stops and returns partial results.
+ */
+export async function executeMultiHopTrade(
+  params: MultiHopTradeParams,
+): Promise<MultiHopResult> {
+  const { hops, initialAmount, spotMeta, agentPrivateKey, onHopComplete } = params;
+
+  const completedHops: HopResult[] = [];
+  let currentAmount = initialAmount;
+
+  for (let i = 0; i < hops.length; i++) {
+    const hop = hops[i];
+
+    // Determine from/to symbols for this hop
+    const fromSymbol = hop.side === "sell" ? hop.pair.base.symbol : hop.pair.quote.symbol;
+    const toSymbol = hop.side === "sell" ? hop.pair.quote.symbol : hop.pair.base.symbol;
+
+    // Execute this hop
+    const result = await executeTrade({
+      fromSymbol,
+      toSymbol,
+      amount: currentAmount,
+      spotMeta,
+      agentPrivateKey,
+    });
+
+    const hopResult: HopResult = {
+      hopIndex: i,
+      fromSymbol,
+      toSymbol,
+      result,
+    };
+
+    // Notify caller of hop completion
+    onHopComplete?.(i, hopResult);
+
+    if (result.status === "error") {
+      return {
+        status: completedHops.length > 0 ? "partial" : "error",
+        completedHops,
+        failedHop: hopResult,
+        error: result.error,
+      };
+    }
+
+    if (result.status === "resting") {
+      // Order didn't fill immediately — for IOC this shouldn't happen, but handle it
+      return {
+        status: completedHops.length > 0 ? "partial" : "error",
+        completedHops,
+        failedHop: hopResult,
+        error: "Order resting (not filled) — IOC orders should fill or cancel",
+      };
+    }
+
+    // Order filled — extract output amount for next hop
+    completedHops.push(hopResult);
+
+    // Calculate output: for sells, output = size * price; for buys, output = size
+    const filledSize = parseFloat(result.totalSz ?? "0");
+    const avgPrice = parseFloat(result.avgPx ?? "0");
+
+    if (hop.side === "sell") {
+      // Sold base token, received quote token (size * price)
+      currentAmount = filledSize * avgPrice;
+    } else {
+      // Bought base token, received base token (size)
+      currentAmount = filledSize;
+    }
+
+    // Small delay between hops to avoid rate limits
+    if (i < hops.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+
+  return {
+    status: "completed",
+    completedHops,
+    finalOutput: currentAmount.toString(),
+  };
 }

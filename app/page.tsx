@@ -37,7 +37,7 @@ export default function AssetRouter() {
   const { data: spotPrices } = useSpotPrices();
   const { data: spotMeta } = useSpotMeta();
   const { state, discoverRoute, executeRoute, reset } = useRouteMachine();
-  const { agent, isApproving, approveError, approve } = useAgent(user?.wallet?.address);
+  const { agent, isApproving, approveError, approve, revoke } = useAgent(user?.wallet?.address);
 
   const availableTokens = useMemo(() => {
     if (!spotPrices) return undefined;
@@ -68,7 +68,7 @@ export default function AssetRouter() {
     function unmute() {
       if (videoRef.current && videoRef.current.muted) {
         videoRef.current.muted = false;
-        videoRef.current.volume = 0.1; // 20% volume (80% quieter)
+        videoRef.current.volume = 0.1; // 10% volume
         setMuted(false);
       }
       window.removeEventListener("click", unmute);
@@ -173,19 +173,14 @@ export default function AssetRouter() {
             </span>
           </div>
           {authenticated ? (
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] text-hl-text-dim">
-                chain: {chainId}
-              </span>
-              <button
-                onClick={logout}
-                className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
-              >
-                {user?.wallet?.address
-                  ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`
-                  : "Disconnect"}
-              </button>
-            </div>
+            <button
+              onClick={logout}
+              className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
+            >
+              {user?.wallet?.address
+                ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`
+                : "Disconnect"}
+            </button>
           ) : (
             <button
               onClick={login}
@@ -328,8 +323,8 @@ export default function AssetRouter() {
 
               <WarningBanner warnings={state.route.warnings} />
 
-              {/* Execute button — single-hop + wallet connected */}
-              {state.route.hops.length === 1 && authenticated ? (
+              {/* Execute button — wallet connected */}
+              {authenticated ? (
                 isWrongChain ? (
                   <button
                     onClick={handleSwitchNetwork}
@@ -359,18 +354,24 @@ export default function AssetRouter() {
                     )}
                   </div>
                 ) : spotMeta ? (
-                  <button
-                    onClick={handleExecute}
-                    className="w-full py-2 text-sm font-medium border border-green-400/30 text-green-400
-                               hover:bg-green-400/10 transition-colors cursor-pointer"
-                  >
-                    Execute Trade
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={handleExecute}
+                      className="w-full py-2 text-sm font-medium border border-green-400/30 text-green-400
+                                 hover:bg-green-400/10 transition-colors cursor-pointer"
+                    >
+                      {state.route.hops.length > 1
+                        ? `Execute ${state.route.hops.length}-Hop Trade`
+                        : "Execute Trade"}
+                    </button>
+                    <button
+                      onClick={revoke}
+                      className="text-[10px] text-hl-text-dim hover:text-hl-error transition-colors cursor-pointer self-center"
+                    >
+                      Reset Agent
+                    </button>
+                  </div>
                 ) : null
-              ) : state.route.hops.length > 1 ? (
-                <div className="text-[10px] text-hl-text-dim text-center py-2">
-                  Multi-hop execution not available yet — direct pairs only
-                </div>
               ) : !authenticated ? (
                 <button
                   onClick={login}
@@ -392,7 +393,9 @@ export default function AssetRouter() {
               </Panel>
               <Panel>
                 <div className="text-xs text-hl-muted animate-pulse">
-                  Signing &amp; submitting order...
+                  {state.route.hops.length > 1 && state.currentHop !== undefined
+                    ? `Executing hop ${state.currentHop + 1} of ${state.route.hops.length}...`
+                    : "Signing & submitting order..."}
                 </div>
               </Panel>
             </>
@@ -425,6 +428,7 @@ export default function AssetRouter() {
                 message={state.message}
                 onRetry={handleExecute}
                 onReset={reset}
+                onResetAgent={state.message.includes("does not exist") ? revoke : undefined}
               />
             </>
           )}
@@ -463,8 +467,8 @@ export default function AssetRouter() {
             Execution: IOC market orders
           </div>
           <div>
-            Direct pair trades execute on Hyperliquid mainnet.
-            Multi-hop routes are preview-only.
+            Trades execute on Hyperliquid mainnet.
+            Multi-hop routes execute sequentially.
           </div>
         </div>
       </main>

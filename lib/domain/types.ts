@@ -143,3 +143,20 @@ export interface TradeResult {
   oid?: number;
   error?: string;
 }
+
+/** Result of a single hop in a multi-hop trade */
+export interface HopResult {
+  hopIndex: number;
+  fromSymbol: string;
+  toSymbol: string;
+  result: TradeResult;
+}
+
+/** Result of a multi-hop trade execution */
+export interface MultiHopResult {
+  status: "completed" | "partial" | "error";
+  completedHops: HopResult[];
+  failedHop?: HopResult;
+  finalOutput?: string;
+  error?: string;
+}
