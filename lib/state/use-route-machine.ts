@@ -1,7 +1,7 @@
 "use client";
 
 import { useReducer, useCallback } from "react";
-import { Token, Route, TradeResult, SpotMeta, MultiHopResult } from "@/lib/domain/types";
+import { Token, Route, TradeResult, SpotMeta, MultiHopResult, OrderType } from "@/lib/domain/types";
 import { findRoute } from "@/lib/routing/pathfinder";
 import { SPOT_PAIRS } from "@/lib/domain/pairs";
 import { MOCK_ORDERBOOKS } from "@/lib/data/mock-orderbooks";
@@ -131,6 +131,8 @@ export function useRouteMachine() {
       amount: number,
       spotMeta: SpotMeta,
       agentPrivateKey: Hex,
+      orderType: OrderType = "market",
+      limitPrice?: number,
     ) => {
       dispatch({ type: "EXECUTE", route });
 
@@ -143,6 +145,8 @@ export function useRouteMachine() {
             amount,
             spotMeta,
             agentPrivateKey,
+            orderType,
+            limitPrice,
           });
 
           if (result.status === "error") {

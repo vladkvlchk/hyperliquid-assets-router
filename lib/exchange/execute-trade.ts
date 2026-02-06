@@ -7,6 +7,7 @@ import {
   RouteHop,
   MultiHopResult,
   HopResult,
+  OrderType,
 } from "@/lib/domain/types";
 import { fetchL2Book, submitOrder } from "@/lib/api/hyperliquid";
 import { floatToWire, signL1Action } from "./signing";
@@ -49,6 +50,8 @@ export interface TradeParams {
   amount: number;
   spotMeta: SpotMeta;
   agentPrivateKey: Hex;
+  orderType?: OrderType;
+  limitPrice?: number;
 }
 
 interface ResolvedPair {
@@ -109,18 +112,30 @@ function resolvePair(
 }
 
 /**
- * Execute a market-like spot trade on Hyperliquid.
+ * Execute a spot trade on Hyperliquid.
+ *
+ * Supports:
+ * - Market orders (IOC with slippage tolerance)
+ * - Limit orders (GTC at specified price)
  *
  * Steps:
  * 1. Resolve the spot pair and trade side from spotMeta
  * 2. Fetch the L2 orderbook for the pair
- * 3. Calculate IOC price with slippage tolerance
+ * 3. Calculate price (market: midPx + slippage, limit: user-specified)
  * 4. Build, sign, and submit the order
  */
 export async function executeTrade(
   params: TradeParams,
 ): Promise<TradeResult> {
-  const { fromSymbol, toSymbol, amount, spotMeta, agentPrivateKey } = params;
+  const {
+    fromSymbol,
+    toSymbol,
+    amount,
+    spotMeta,
+    agentPrivateKey,
+    orderType = "market",
+    limitPrice,
+  } = params;
 
   // 1. Resolve pair
   const resolved = resolvePair(fromSymbol, toSymbol, spotMeta);
@@ -147,14 +162,24 @@ export async function executeTrade(
   let price: number;
   let size: number;
 
-  if (resolved.side === "sell") {
-    // Selling base token: user provides base amount
-    size = amount;
-    price = roundPrice(midPx * (1 - SLIPPAGE), "sell");
+  if (orderType === "limit" && limitPrice !== undefined) {
+    // Limit order: use user-specified price
+    price = roundPrice(limitPrice, resolved.side);
+    if (resolved.side === "sell") {
+      size = amount;
+    } else {
+      // For buy limit orders, calculate size based on limit price
+      size = amount / limitPrice;
+    }
   } else {
-    // Buying base token: user provides quote amount, convert to base size
-    size = amount / midPx;
-    price = roundPrice(midPx * (1 + SLIPPAGE), "buy");
+    // Market order: use midPx with slippage
+    if (resolved.side === "sell") {
+      size = amount;
+      price = roundPrice(midPx * (1 - SLIPPAGE), "sell");
+    } else {
+      size = amount / midPx;
+      price = roundPrice(midPx * (1 + SLIPPAGE), "buy");
+    }
   }
 
   // Round size to the pair's szDecimals
@@ -166,7 +191,8 @@ export async function executeTrade(
   }
 
   // Validate minimum order value ($10)
-  const orderValue = resolved.side === "sell" ? size * midPx : amount;
+  const refPrice = orderType === "limit" && limitPrice ? limitPrice : midPx;
+  const orderValue = resolved.side === "sell" ? size * refPrice : amount;
   if (orderValue < 10) {
     return {
       status: "error",
@@ -181,7 +207,7 @@ export async function executeTrade(
     p: floatToWire(price),
     s: floatToWire(size),
     r: false,
-    t: { limit: { tif: "Ioc" } },
+    t: { limit: { tif: orderType === "limit" ? "Gtc" : "Ioc" } },
   };
 
   const action: OrderAction = {

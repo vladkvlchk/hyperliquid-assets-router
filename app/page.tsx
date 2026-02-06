@@ -4,7 +4,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useSwitchChain } from "wagmi";
 import { arbitrum } from "viem/chains";
-import { Token } from "@/lib/domain/types";
+import { Token, OrderType } from "@/lib/domain/types";
 import { TOKENS } from "@/lib/domain/tokens";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
 import { useBalances } from "@/lib/state/use-balances";
@@ -19,12 +19,16 @@ import { WarningBanner } from "@/components/warning-banner";
 import { TradeResultDisplay, TradeErrorDisplay } from "@/components/trade-result";
 import { SpotPrices } from "@/components/spot-prices";
 import { SpotTicker } from "@/components/spot-ticker";
+import { OpenOrders } from "@/components/open-orders";
 import { useSpotPrices } from "@/lib/state/use-spot-prices";
+import { useOpenOrders } from "@/lib/state/use-open-orders";
 
 export default function AssetRouter() {
   const [tokenA, setTokenA] = useState<Token | null>(null);
   const [tokenB, setTokenB] = useState<Token | null>(null);
   const [amount, setAmount] = useState("");
+  const [orderType, setOrderType] = useState<OrderType>("market");
+  const [limitPrice, setLimitPrice] = useState("");
 
   const [muted, setMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -38,6 +42,7 @@ export default function AssetRouter() {
   const { data: spotMeta } = useSpotMeta();
   const { state, discoverRoute, executeRoute, reset } = useRouteMachine();
   const { agent, isApproving, approveError, approve, revoke } = useAgent(user?.wallet?.address);
+  const { data: openOrders, invalidate: invalidateOrders } = useOpenOrders(user?.wallet?.address);
 
   const availableTokens = useMemo(() => {
     if (!spotPrices) return undefined;
@@ -109,11 +114,15 @@ export default function AssetRouter() {
     )
       return;
 
+    const parsedLimitPrice = parseFloat(limitPrice) || undefined;
+
     executeRoute(
       state.route,
       parsedAmount,
       spotMeta,
       agent.privateKey,
+      orderType,
+      parsedLimitPrice,
     );
   }
 
@@ -233,6 +242,18 @@ export default function AssetRouter() {
           </div>
         )}
 
+        {/* Open Orders */}
+        {authenticated && agent && spotMeta && openOrders && openOrders.length > 0 && (
+          <div className="mb-4">
+            <OpenOrders
+              orders={openOrders}
+              agentPrivateKey={agent.privateKey}
+              spotMeta={spotMeta}
+              onOrderCancelled={invalidateOrders}
+            />
+          </div>
+        )}
+
         {/* Input Panel */}
         <Panel>
           <div className="flex flex-col gap-4">
@@ -280,6 +301,52 @@ export default function AssetRouter() {
               tokenSymbol={tokenA?.symbol}
               maxAmount={maxAmount}
             />
+
+            {/* Order Type Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-hl-text-dim uppercase tracking-wider">Order Type</span>
+              <div className="flex border border-hl-border/60 rounded overflow-hidden">
+                <button
+                  onClick={() => setOrderType("market")}
+                  className={`px-3 py-1 text-[11px] cursor-pointer transition-colors ${
+                    orderType === "market"
+                      ? "bg-hl-accent/20 text-hl-accent"
+                      : "text-hl-text-dim hover:text-hl-muted"
+                  }`}
+                >
+                  Market
+                </button>
+                <button
+                  onClick={() => setOrderType("limit")}
+                  className={`px-3 py-1 text-[11px] cursor-pointer transition-colors ${
+                    orderType === "limit"
+                      ? "bg-hl-accent/20 text-hl-accent"
+                      : "text-hl-text-dim hover:text-hl-muted"
+                  }`}
+                >
+                  Limit
+                </button>
+              </div>
+            </div>
+
+            {/* Limit Price Input */}
+            {orderType === "limit" && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-hl-text-dim uppercase tracking-wider">
+                  Limit Price (USD)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  placeholder="Enter limit price"
+                  className="w-full px-3 py-2 text-sm bg-hl-surface/50 border border-hl-border/60
+                             text-hl-text placeholder:text-hl-text-dim/50
+                             focus:outline-none focus:border-hl-accent/50"
+                />
+              </div>
+            )}
 
             {insufficientBalance && (
               <div className="text-[11px] text-hl-warn">
@@ -357,12 +424,14 @@ export default function AssetRouter() {
                   <div className="flex flex-col gap-1">
                     <button
                       onClick={handleExecute}
+                      disabled={orderType === "limit" && !limitPrice}
                       className="w-full py-2 text-sm font-medium border border-green-400/30 text-green-400
-                                 hover:bg-green-400/10 transition-colors cursor-pointer"
+                                 hover:bg-green-400/10 transition-colors cursor-pointer
+                                 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       {state.route.hops.length > 1
-                        ? `Execute ${state.route.hops.length}-Hop Trade`
-                        : "Execute Trade"}
+                        ? `Execute ${state.route.hops.length}-Hop ${orderType === "limit" ? "Limit" : "Market"}`
+                        : `Execute ${orderType === "limit" ? "Limit" : "Market"} Order`}
                     </button>
                     <button
                       onClick={revoke}

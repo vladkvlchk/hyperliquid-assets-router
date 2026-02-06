@@ -5,6 +5,9 @@ import {
   L2Book,
   OrderAction,
   TradeResult,
+  CancelAction,
+  CancelResult,
+  OpenOrder,
 } from "@/lib/domain/types";
 import { TOKENS, displayName } from "@/lib/domain/tokens";
 
@@ -142,6 +145,18 @@ export async function fetchL2Book(coin: string): Promise<L2Book> {
   return res.json();
 }
 
+/* ── Open orders ── */
+
+export async function fetchOpenOrders(address: string): Promise<OpenOrder[]> {
+  const res = await fetch(INFO_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "openOrders", user: address }),
+  });
+  if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
+  return res.json();
+}
+
 /* ── Exchange endpoint (order submission) ── */
 
 /** Split a 65-byte hex signature into { r, s, v } as Hyperliquid expects */
@@ -204,4 +219,34 @@ export async function submitOrder(
   }
 
   return { status: "error", error: "Unexpected response format" };
+}
+
+export async function submitCancel(
+  action: CancelAction,
+  nonce: number,
+  signature: `0x${string}`,
+): Promise<CancelResult> {
+  const res = await fetch(EXCHANGE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      nonce,
+      signature: splitSig(signature),
+      vaultAddress: null,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    return { status: "error", error: `HTTP ${res.status}: ${text}` };
+  }
+
+  const data = await res.json();
+
+  if (data.status !== "ok") {
+    return { status: "error", error: data.response ?? "Unknown error" };
+  }
+
+  return { status: "success" };
 }

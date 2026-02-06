@@ -2,7 +2,9 @@ import { encode } from "@msgpack/msgpack";
 import { keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { OrderAction } from "@/lib/domain/types";
+import { OrderAction, CancelAction } from "@/lib/domain/types";
+
+type L1Action = OrderAction | CancelAction;
 
 /**
  * Minimal EIP-1193 provider interface — used by agent.ts for wallet signing.
@@ -51,7 +53,7 @@ export function floatToWire(n: number): string {
 /**
  * Compute the action hash used as the phantom agent's connectionId.
  */
-function actionHash(action: OrderAction, nonce: number): `0x${string}` {
+function actionHash(action: L1Action, nonce: number): `0x${string}` {
   const encoded = encode(action);
 
   // nonce as 8 bytes big-endian
@@ -78,7 +80,7 @@ function actionHash(action: OrderAction, nonce: number): `0x${string}` {
  * Pure local signing — no wallet interaction, no chainId validation.
  */
 export async function signL1Action(
-  action: OrderAction,
+  action: L1Action,
   nonce: number,
   agentPrivateKey: Hex,
 ): Promise<`0x${string}`> {

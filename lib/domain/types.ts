@@ -105,19 +105,46 @@ export interface SpotMeta {
 
 /* ── Order wire format (exchange endpoint) ── */
 
+export type OrderType = "market" | "limit";
+export type TimeInForce = "Ioc" | "Gtc" | "Alo";
+
 export interface OrderWire {
   a: number;
   b: boolean;
   p: string;
   s: string;
   r: boolean;
-  t: { limit: { tif: "Ioc" | "Gtc" | "Alo" } };
+  t: { limit: { tif: TimeInForce } };
 }
 
 export interface OrderAction {
   type: "order";
   orders: OrderWire[];
   grouping: "na";
+}
+
+export interface CancelWire {
+  a: number;
+  o: number;
+}
+
+export interface CancelAction {
+  type: "cancel";
+  cancels: CancelWire[];
+}
+
+export interface CancelResult {
+  status: "success" | "error";
+  error?: string;
+}
+
+export interface OpenOrder {
+  coin: string;
+  oid: number;
+  side: "B" | "A"; // B = buy, A = ask/sell
+  sz: string;
+  limitPx: string;
+  timestamp: number;
 }
 
 /* ── L2 orderbook ── */
