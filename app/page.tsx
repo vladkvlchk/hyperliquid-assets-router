@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useAccount, useSwitchChain } from "wagmi";
+import { arbitrum } from "viem/chains";
 import { Token } from "@/lib/domain/types";
 import { TOKENS } from "@/lib/domain/tokens";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
@@ -28,6 +30,9 @@ export default function AssetRouter() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { login, logout, authenticated, user } = usePrivy();
+  const { chainId } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const isWrongChain = authenticated && chainId !== undefined && chainId !== arbitrum.id;
   const { data: balances } = useBalances(user?.wallet?.address);
   const { data: spotPrices } = useSpotPrices();
   const { data: spotMeta } = useSpotMeta();
@@ -63,6 +68,7 @@ export default function AssetRouter() {
     function unmute() {
       if (videoRef.current && videoRef.current.muted) {
         videoRef.current.muted = false;
+        videoRef.current.volume = 0.1; // 20% volume (80% quieter)
         setMuted(false);
       }
       window.removeEventListener("click", unmute);
@@ -89,6 +95,10 @@ export default function AssetRouter() {
 
   async function handleApproveAgent() {
     await approve();
+  }
+
+  function handleSwitchNetwork() {
+    switchChain({ chainId: arbitrum.id });
   }
 
   async function handleExecute() {
@@ -163,14 +173,19 @@ export default function AssetRouter() {
             </span>
           </div>
           {authenticated ? (
-            <button
-              onClick={logout}
-              className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
-            >
-              {user?.wallet?.address
-                ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`
-                : "Disconnect"}
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-hl-text-dim">
+                chain: {chainId}
+              </span>
+              <button
+                onClick={logout}
+                className="text-[10px] text-hl-text-dim hover:text-hl-muted transition-colors uppercase tracking-wider cursor-pointer"
+              >
+                {user?.wallet?.address
+                  ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}`
+                  : "Disconnect"}
+              </button>
+            </div>
           ) : (
             <button
               onClick={login}
@@ -315,7 +330,15 @@ export default function AssetRouter() {
 
               {/* Execute button — single-hop + wallet connected */}
               {state.route.hops.length === 1 && authenticated ? (
-                !agent ? (
+                isWrongChain ? (
+                  <button
+                    onClick={handleSwitchNetwork}
+                    className="w-full py-2 text-sm font-medium border border-orange-400/30 text-orange-400
+                               hover:bg-orange-400/10 transition-colors cursor-pointer"
+                  >
+                    Switch to Arbitrum
+                  </button>
+                ) : !agent ? (
                   <div className="flex flex-col gap-2">
                     <button
                       onClick={handleApproveAgent}
