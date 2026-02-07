@@ -295,7 +295,7 @@ export default function AssetRouter() {
       {/* Live price ticker */}
       <SpotTicker onSelect={(name) => selectToken(name, "to")} />
 
-      <div className="relative z-10 max-w-[900px] mx-auto px-6 py-8 flex gap-6">
+      <div className="relative z-10 max-w-[900px] mx-auto px-4 sm:px-6 py-6 sm:py-8 flex lg:gap-6">
         {/* Sidebar — desktop only */}
         <aside className="hidden lg:block w-[260px] shrink-0">
           <div className="sticky top-8">
@@ -305,7 +305,7 @@ export default function AssetRouter() {
           </div>
         </aside>
 
-      <main className="min-w-0 flex-1 max-w-[600px]">
+      <main className="min-w-0 flex-1 w-full lg:max-w-[600px]">
         {/* Balances */}
         {authenticated && balances && balances.length > 0 && (
           <div className="mb-4">
