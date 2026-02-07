@@ -34,6 +34,7 @@ export default function AssetRouter() {
   const [volume, setVolume] = useState(0.1);
   const [videoStopped, setVideoStopped] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mobileVideoRef = useRef<HTMLVideoElement>(null);
 
   const { login, logout, authenticated, user } = usePrivy();
   const { chainId } = useAccount();
@@ -103,11 +104,13 @@ export default function AssetRouter() {
   // Unmute on first user interaction — browsers require a user gesture before allowing audio
   useEffect(() => {
     function unmute() {
-      if (videoRef.current && videoRef.current.muted) {
-        videoRef.current.muted = false;
-        videoRef.current.volume = 0.1; // 10% volume
-        setMuted(false);
-      }
+      [videoRef, mobileVideoRef].forEach((ref) => {
+        if (ref.current && ref.current.muted) {
+          ref.current.muted = false;
+          ref.current.volume = 0.1;
+        }
+      });
+      setMuted(false);
       window.removeEventListener("click", unmute);
       window.removeEventListener("keydown", unmute);
     }
@@ -120,30 +123,39 @@ export default function AssetRouter() {
   }, []);
 
   function toggleMute() {
-    if (videoRef.current) {
-      videoRef.current.muted = !videoRef.current.muted;
-      setMuted(videoRef.current.muted);
-    }
+    const newMuted = !muted;
+    [videoRef, mobileVideoRef].forEach((ref) => {
+      if (ref.current) {
+        ref.current.muted = newMuted;
+      }
+    });
+    setMuted(newMuted);
   }
 
   function handleVolumeChange(newVolume: number) {
-    if (videoRef.current) {
-      videoRef.current.volume = newVolume;
-      videoRef.current.muted = newVolume === 0;
-      setVolume(newVolume);
-      setMuted(newVolume === 0);
-    }
+    const newMuted = newVolume === 0;
+    [videoRef, mobileVideoRef].forEach((ref) => {
+      if (ref.current) {
+        ref.current.volume = newVolume;
+        ref.current.muted = newMuted;
+      }
+    });
+    setVolume(newVolume);
+    setMuted(newMuted);
   }
 
   function toggleVideo() {
-    if (videoRef.current) {
-      if (videoStopped) {
-        videoRef.current.play();
-      } else {
-        videoRef.current.pause();
+    const newStopped = !videoStopped;
+    [videoRef, mobileVideoRef].forEach((ref) => {
+      if (ref.current) {
+        if (newStopped) {
+          ref.current.pause();
+        } else {
+          ref.current.play();
+        }
       }
-      setVideoStopped(!videoStopped);
-    }
+    });
+    setVideoStopped(newStopped);
   }
 
   function handleDiscover() {
@@ -208,6 +220,7 @@ export default function AssetRouter() {
       </video>
       {/* Mobile video */}
       <video
+        ref={mobileVideoRef}
         autoPlay
         loop
         muted
