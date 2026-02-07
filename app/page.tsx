@@ -101,24 +101,22 @@ export default function AssetRouter() {
   const insufficientBalance =
     authenticated && tokenA && parsedAmount > 0 && parsedAmount > parseFloat(maxAmount ?? "0");
 
-  // Unmute on first user interaction — browsers require a user gesture before allowing audio
+  // Unmute on first click/tap anywhere on page
   useEffect(() => {
     function unmute() {
       [videoRef, mobileVideoRef].forEach((ref) => {
-        if (ref.current && ref.current.muted) {
+        if (ref.current) {
           ref.current.muted = false;
           ref.current.volume = 0.1;
         }
       });
       setMuted(false);
-      window.removeEventListener("click", unmute);
-      window.removeEventListener("keydown", unmute);
     }
-    window.addEventListener("click", unmute, { once: true });
-    window.addEventListener("keydown", unmute, { once: true });
+    document.addEventListener("click", unmute, { once: true });
+    document.addEventListener("touchend", unmute, { once: true });
     return () => {
-      window.removeEventListener("click", unmute);
-      window.removeEventListener("keydown", unmute);
+      document.removeEventListener("click", unmute);
+      document.removeEventListener("touchend", unmute);
     };
   }, []);
 
@@ -327,6 +325,11 @@ export default function AssetRouter() {
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                 {balances
                   .filter((b) => parseFloat(b.total) > 0)
+                  .sort((a, b) => {
+                    const aUsd = getUsdValue(a.coin, parseFloat(a.total)) ?? 0;
+                    const bUsd = getUsdValue(b.coin, parseFloat(b.total)) ?? 0;
+                    return bUsd - aUsd;
+                  })
                   .map((b) => {
                     const total = parseFloat(b.total);
                     const usdValue = getUsdValue(b.coin, total);
