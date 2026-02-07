@@ -4,6 +4,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useSwitchChain } from "wagmi";
 import { arbitrum } from "viem/chains";
+
 import { Token, OrderType } from "@/lib/domain/types";
 import { TOKENS, displayName } from "@/lib/domain/tokens";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
@@ -101,16 +102,28 @@ export default function AssetRouter() {
   const insufficientBalance =
     authenticated && tokenA && parsedAmount > 0 && parsedAmount > parseFloat(maxAmount ?? "0");
 
-  // Unmute on first click/tap anywhere on page
+  // Load saved volume on mount and apply on first click/tap
   useEffect(() => {
+    const savedVolume = localStorage.getItem("videoVolume");
+    const targetVolume = savedVolume !== null ? parseFloat(savedVolume) : 0.1;
+    const isMuted = targetVolume === 0;
+
+    // Batch state updates using a microtask to avoid cascading renders warning
+    queueMicrotask(() => {
+      setVolume(targetVolume || 0.1);
+      setMuted(isMuted);
+    });
+
+    // If saved as muted, don't set up unmute listener
+    if (isMuted) return;
+
     function unmute() {
       [videoRef, mobileVideoRef].forEach((ref) => {
         if (ref.current) {
           ref.current.muted = false;
-          ref.current.volume = 0.1;
+          ref.current.volume = targetVolume;
         }
       });
-      setMuted(false);
     }
     document.addEventListener("click", unmute, { once: true });
     document.addEventListener("touchend", unmute, { once: true });
@@ -128,6 +141,7 @@ export default function AssetRouter() {
       }
     });
     setMuted(newMuted);
+    localStorage.setItem("videoVolume", newMuted ? "0" : String(volume));
   }
 
   function handleVolumeChange(newVolume: number) {
@@ -140,6 +154,7 @@ export default function AssetRouter() {
     });
     setVolume(newVolume);
     setMuted(newMuted);
+    localStorage.setItem("videoVolume", String(newVolume));
   }
 
   function toggleVideo() {
