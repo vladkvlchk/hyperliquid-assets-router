@@ -195,15 +195,26 @@ export default function AssetRouter() {
   return (
     <div className="theme-video relative min-h-screen">
       {/* Background video */}
+      {/* Desktop video */}
       <video
         ref={videoRef}
         autoPlay
         loop
         muted
         playsInline
-        className="fixed inset-0 w-full h-full object-cover z-0 blur-sm portrait:rotate-90 portrait:scale-[1.8]"
+        className="fixed inset-0 w-full h-full object-cover z-0 blur-sm hidden sm:block"
       >
         <source src="/lighter-3.1.mp4" type="video/mp4" />
+      </video>
+      {/* Mobile video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="fixed inset-0 w-full h-full object-cover z-0 blur-sm sm:hidden"
+      >
+        <source src="/lighter-3.1-vertical.mp4" type="video/mp4" />
       </video>
       {/* Subtle dark overlay for base readability */}
       <div className="fixed inset-0 z-0 bg-black/30" />
