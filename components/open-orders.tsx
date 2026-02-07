@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { OpenOrder, SpotMeta } from "@/lib/domain/types";
 import { cancelOrder } from "@/lib/exchange/cancel-order";
+import { displayName } from "@/lib/domain/tokens";
 import { Panel, SectionLabel } from "./panel";
 import type { Hex } from "viem";
 
@@ -55,13 +56,13 @@ export function OpenOrders({
         if (pair.name.startsWith("@")) {
           const baseToken = spotMeta.tokens.find((t) => t.index === pair.tokens[0]);
           if (baseToken) {
-            return baseToken.name;
+            return displayName(baseToken.name);
           }
         }
-        return pair.name;
+        return displayName(pair.name);
       }
     }
-    return coin;
+    return displayName(coin);
   }
 
   async function handleCancel(order: OpenOrder) {

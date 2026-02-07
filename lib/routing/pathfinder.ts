@@ -64,11 +64,13 @@ function generateWarnings(
     const book = orderbooks[hop.pair.id];
     if (!book) continue;
 
+    const pairName = `${hop.pair.base.symbol}/${hop.pair.quote.symbol}`;
+
     // Stale data check
     if (now - book.timestamp > STALE_THRESHOLD_MS) {
       warnings.push({
         type: "stale_data",
-        message: `Orderbook data for ${hop.pair.id} is stale (>${Math.round((now - book.timestamp) / 1000)}s old)`,
+        message: `Orderbook data for ${pairName} is stale (>${Math.round((now - book.timestamp) / 1000)}s old)`,
         severity: "warn",
       });
     }
@@ -79,7 +81,7 @@ function generateWarnings(
     if (topLevelSize < hop.estimatedOutput * 0.5) {
       warnings.push({
         type: "low_liquidity",
-        message: `Low liquidity on ${hop.pair.id} — may experience significant slippage`,
+        message: `Low liquidity on ${pairName} — may experience significant slippage`,
         severity: "warn",
       });
     }

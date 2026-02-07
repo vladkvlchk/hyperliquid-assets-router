@@ -5,7 +5,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useSwitchChain } from "wagmi";
 import { arbitrum } from "viem/chains";
 import { Token, OrderType } from "@/lib/domain/types";
-import { TOKENS } from "@/lib/domain/tokens";
+import { TOKENS, displayName } from "@/lib/domain/tokens";
 import { useRouteMachine } from "@/lib/state/use-route-machine";
 import { useBalances } from "@/lib/state/use-balances";
 import { useSpotMeta } from "@/lib/state/use-spot-meta";
@@ -46,9 +46,14 @@ export default function AssetRouter() {
 
   const availableTokens = useMemo(() => {
     if (!spotPrices) return undefined;
-    return spotPrices.map(
+    const tokens = spotPrices.map(
       (p) => TOKENS[p.pair] ?? { symbol: p.pair, name: p.pair, decimals: 4 },
     );
+    // Always include USDC as it's a common quote token
+    if (!tokens.some((t) => t.symbol === "USDC")) {
+      tokens.unshift(TOKENS["USDC"] ?? { symbol: "USDC", name: "USD Coin", decimals: 6 });
+    }
+    return tokens;
   }, [spotPrices]);
 
   const heldTokens = useMemo(() => {
@@ -57,6 +62,31 @@ export default function AssetRouter() {
       .filter((b) => parseFloat(b.total) > 0)
       .map((b) => TOKENS[b.coin] ?? { symbol: b.coin, name: b.coin, decimals: 4 });
   }, [balances]);
+
+  // Price lookup: coin symbol -> USD price
+  const priceMap = useMemo(() => {
+    if (!spotPrices) return new Map<string, number>();
+    const map = new Map<string, number>();
+    map.set("USDC", 1.0);
+    for (const p of spotPrices) {
+      map.set(p.pair, p.midPx);
+    }
+    return map;
+  }, [spotPrices]);
+
+  // Get USD value for a coin
+  function getUsdValue(coin: string, amount: number): number | null {
+    // Try direct lookup
+    let price = priceMap.get(coin);
+    if (price !== undefined) return amount * price;
+    // Try display name alias (UETH -> ETH)
+    const alias = displayName(coin);
+    if (alias !== coin) {
+      price = priceMap.get(alias);
+      if (price !== undefined) return amount * price;
+    }
+    return null;
+  }
 
   const maxAmount = useMemo(() => {
     if (!balances || !tokenA) return undefined;
@@ -95,7 +125,7 @@ export default function AssetRouter() {
   }
 
   function handleDiscover() {
-    discoverRoute(tokenA, tokenB, parsedAmount);
+    discoverRoute(tokenA, tokenB, parsedAmount, spotMeta);
   }
 
   async function handleApproveAgent() {
@@ -223,34 +253,34 @@ export default function AssetRouter() {
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                 {balances
                   .filter((b) => parseFloat(b.total) > 0)
-                  .map((b) => (
-                    <button
-                      key={b.coin}
-                      onClick={() => selectToken(b.coin, "from")}
-                      className="text-xs text-hl-muted hover:text-hl-accent transition-colors cursor-pointer"
-                    >
-                      {b.coin}{" "}
-                      <span className="text-hl-text">
-                        {parseFloat(b.total).toLocaleString(undefined, {
-                          maximumFractionDigits: 4,
-                        })}
-                      </span>
-                    </button>
-                  ))}
+                  .map((b) => {
+                    const total = parseFloat(b.total);
+                    const usdValue = getUsdValue(b.coin, total);
+                    return (
+                      <button
+                        key={b.coin}
+                        onClick={() => selectToken(b.coin, "from")}
+                        className="text-xs text-hl-muted hover:text-hl-accent transition-colors cursor-pointer"
+                      >
+                        {displayName(b.coin)}{" "}
+                        <span className="text-hl-text">
+                          {total.toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                          })}
+                        </span>
+                        {usdValue !== null && (
+                          <span className="text-hl-text-dim ml-1">
+                            ${usdValue.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
               </div>
             </Panel>
-          </div>
-        )}
-
-        {/* Open Orders */}
-        {authenticated && agent && spotMeta && openOrders && openOrders.length > 0 && (
-          <div className="mb-4">
-            <OpenOrders
-              orders={openOrders}
-              agentPrivateKey={agent.privateKey}
-              spotMeta={spotMeta}
-              onOrderCancelled={invalidateOrders}
-            />
           </div>
         )}
 
@@ -302,52 +332,6 @@ export default function AssetRouter() {
               maxAmount={maxAmount}
             />
 
-            {/* Order Type Toggle */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-hl-text-dim uppercase tracking-wider">Order Type</span>
-              <div className="flex border border-hl-border/60 rounded overflow-hidden">
-                <button
-                  onClick={() => setOrderType("market")}
-                  className={`px-3 py-1 text-[11px] cursor-pointer transition-colors ${
-                    orderType === "market"
-                      ? "bg-hl-accent/20 text-hl-accent"
-                      : "text-hl-text-dim hover:text-hl-muted"
-                  }`}
-                >
-                  Market
-                </button>
-                <button
-                  onClick={() => setOrderType("limit")}
-                  className={`px-3 py-1 text-[11px] cursor-pointer transition-colors ${
-                    orderType === "limit"
-                      ? "bg-hl-accent/20 text-hl-accent"
-                      : "text-hl-text-dim hover:text-hl-muted"
-                  }`}
-                >
-                  Limit
-                </button>
-              </div>
-            </div>
-
-            {/* Limit Price Input */}
-            {orderType === "limit" && (
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-hl-text-dim uppercase tracking-wider">
-                  Limit Price (USD)
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={limitPrice}
-                  onChange={(e) => setLimitPrice(e.target.value)}
-                  placeholder="Enter limit price"
-                  className="w-full px-3 py-2 text-sm bg-hl-surface/50 border border-hl-border/60
-                             text-hl-text placeholder:text-hl-text-dim/50
-                             focus:outline-none focus:border-hl-accent/50"
-                />
-              </div>
-            )}
-
             {insufficientBalance && (
               <div className="text-[11px] text-hl-warn">
                 Insufficient balance
@@ -389,6 +373,56 @@ export default function AssetRouter() {
               />
 
               <WarningBanner warnings={state.route.warnings} />
+
+              {/* Order Type Toggle — only for single-hop routes */}
+              {state.route.hops.length === 1 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-hl-text-dim uppercase tracking-wider">Order Type</span>
+                    <div className="flex border border-hl-border/60 rounded overflow-hidden">
+                      <button
+                        onClick={() => setOrderType("market")}
+                        className={`px-3 py-1 text-[11px] cursor-pointer transition-colors ${
+                          orderType === "market"
+                            ? "bg-hl-accent/20 text-hl-accent"
+                            : "text-hl-text-dim hover:text-hl-muted"
+                        }`}
+                      >
+                        Market
+                      </button>
+                      <button
+                        onClick={() => setOrderType("limit")}
+                        className={`px-3 py-1 text-[11px] cursor-pointer transition-colors ${
+                          orderType === "limit"
+                            ? "bg-hl-accent/20 text-hl-accent"
+                            : "text-hl-text-dim hover:text-hl-muted"
+                        }`}
+                      >
+                        Limit
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Limit Price Input */}
+                  {orderType === "limit" && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-hl-text-dim uppercase tracking-wider">
+                        Limit Price (USD)
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={limitPrice}
+                        onChange={(e) => setLimitPrice(e.target.value)}
+                        placeholder="Enter limit price"
+                        className="w-full px-3 py-2 text-sm bg-hl-surface/50 border border-hl-border/60
+                                   text-hl-text placeholder:text-hl-text-dim/50
+                                   focus:outline-none focus:border-hl-accent/50"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Execute button — wallet connected */}
               {authenticated ? (
@@ -520,14 +554,22 @@ export default function AssetRouter() {
               <div className="text-xs text-hl-error">{state.message}</div>
             </Panel>
           )}
-
-          {/* Idle hint */}
-          {state.status === "idle" && tokenA && tokenB && parsedAmount > 0 && (
-            <div className="text-[10px] text-hl-text-dim text-center py-2">
-              Press &quot;Find Route&quot; to discover the optimal path
-            </div>
-          )}
         </div>
+
+        {/* Open Orders */}
+        {authenticated && agent && spotMeta && openOrders && openOrders.length > 0 && (
+          <div className="mt-4">
+            <OpenOrders
+              orders={openOrders}
+              agentPrivateKey={agent.privateKey}
+              spotMeta={spotMeta}
+              onOrderCancelled={() => {
+                invalidateOrders();
+                reset();
+              }}
+            />
+          </div>
+        )}
 
         {/* Footer info */}
         <div className="mt-8 border-t border-hl-border pt-4 text-[10px] text-hl-text-dim space-y-1">

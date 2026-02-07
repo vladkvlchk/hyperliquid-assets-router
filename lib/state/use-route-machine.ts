@@ -1,12 +1,43 @@
 "use client";
 
 import { useReducer, useCallback } from "react";
-import { Token, Route, TradeResult, SpotMeta, MultiHopResult, OrderType } from "@/lib/domain/types";
+import { Token, Route, TradeResult, SpotMeta, MultiHopResult, OrderType, OrderbookSnapshot, SpotPair } from "@/lib/domain/types";
 import { findRoute } from "@/lib/routing/pathfinder";
-import { SPOT_PAIRS } from "@/lib/domain/pairs";
-import { MOCK_ORDERBOOKS } from "@/lib/data/mock-orderbooks";
+import { fetchL2Book } from "@/lib/api/hyperliquid";
 import { executeTrade, executeMultiHopTrade } from "@/lib/exchange/execute-trade";
+import { TOKENS, displayName } from "@/lib/domain/tokens";
 import type { Hex } from "viem";
+
+/** Convert L2Book to OrderbookSnapshot format */
+async function fetchOrderbookSnapshot(pairId: string): Promise<OrderbookSnapshot | null> {
+  try {
+    const book = await fetchL2Book(pairId);
+    return {
+      pairId,
+      bids: book.levels[0].map((l) => ({ price: parseFloat(l.px), size: parseFloat(l.sz) })),
+      asks: book.levels[1].map((l) => ({ price: parseFloat(l.px), size: parseFloat(l.sz) })),
+      timestamp: book.time,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Build SpotPair from spotMeta */
+function buildPairsFromMeta(spotMeta: SpotMeta): SpotPair[] {
+  return spotMeta.universe.map((pair) => {
+    const baseToken = spotMeta.tokens.find((t) => t.index === pair.tokens[0]);
+    const quoteToken = spotMeta.tokens.find((t) => t.index === pair.tokens[1]);
+    // Apply display name aliases (UETH -> ETH, UBTC -> BTC, etc.)
+    const baseName = displayName(baseToken?.name ?? "UNKNOWN");
+    const quoteName = displayName(quoteToken?.name ?? "UNKNOWN");
+    return {
+      id: pair.name,
+      base: TOKENS[baseName] ?? { symbol: baseName, name: baseName, decimals: 4 },
+      quote: TOKENS[quoteName] ?? { symbol: quoteName, name: quoteName, decimals: 4 },
+    };
+  });
+}
 
 /**
  * Explicit state machine for route discovery + trade execution.
@@ -76,7 +107,7 @@ export function useRouteMachine() {
   const [state, dispatch] = useReducer(routeReducer, { status: "idle" });
 
   const discoverRoute = useCallback(
-    (from: Token | null, to: Token | null, amount: number) => {
+    async (from: Token | null, to: Token | null, amount: number, spotMeta: SpotMeta | undefined) => {
       if (!from || !to) {
         dispatch({ type: "ERROR", message: "Select both tokens" });
         return;
@@ -98,29 +129,67 @@ export function useRouteMachine() {
         return;
       }
 
+      if (!spotMeta) {
+        dispatch({ type: "ERROR", message: "Loading market data..." });
+        return;
+      }
+
       dispatch({ type: "DISCOVER" });
 
-      setTimeout(() => {
-        try {
-          const route = findRoute(
-            from,
-            to,
-            amount,
-            SPOT_PAIRS,
-            MOCK_ORDERBOOKS,
+      try {
+        // Build pairs from spotMeta
+        const allPairs = buildPairsFromMeta(spotMeta);
+
+        // First, check for direct pair (1 hop)
+        const directPair = allPairs.find(
+          (p) =>
+            (p.base.symbol === from.symbol && p.quote.symbol === to.symbol) ||
+            (p.base.symbol === to.symbol && p.quote.symbol === from.symbol)
+        );
+
+        let relevantPairs: SpotPair[];
+        if (directPair) {
+          // Direct route exists, only fetch that orderbook
+          relevantPairs = [directPair];
+        } else {
+          // No direct route, find pairs for 2-hop routes via common intermediaries
+          // Common intermediaries: USDC, HYPE
+          const intermediaries = ["USDC", "HYPE"];
+          relevantPairs = allPairs.filter(
+            (p) =>
+              // Pairs connecting from token to intermediary
+              ((p.base.symbol === from.symbol || p.quote.symbol === from.symbol) &&
+                intermediaries.some((i) => p.base.symbol === i || p.quote.symbol === i)) ||
+              // Pairs connecting intermediary to to token
+              ((p.base.symbol === to.symbol || p.quote.symbol === to.symbol) &&
+                intermediaries.some((i) => p.base.symbol === i || p.quote.symbol === i))
           );
-          if (route) {
-            dispatch({ type: "ROUTE_FOUND", route });
-          } else {
-            dispatch({ type: "NO_ROUTE", from, to });
-          }
-        } catch (e) {
-          dispatch({
-            type: "ERROR",
-            message: e instanceof Error ? e.message : "Unknown error",
-          });
         }
-      }, 400);
+
+        const orderbookPromises = relevantPairs.map((pair) =>
+          fetchOrderbookSnapshot(pair.id)
+        );
+        const orderbookResults = await Promise.all(orderbookPromises);
+
+        const orderbooks: Record<string, OrderbookSnapshot> = {};
+        orderbookResults.forEach((book) => {
+          if (book) {
+            orderbooks[book.pairId] = book;
+          }
+        });
+
+        const route = findRoute(from, to, amount, relevantPairs, orderbooks);
+        if (route) {
+          dispatch({ type: "ROUTE_FOUND", route });
+        } else {
+          dispatch({ type: "NO_ROUTE", from, to });
+        }
+      } catch (e) {
+        dispatch({
+          type: "ERROR",
+          message: e instanceof Error ? e.message : "Unknown error",
+        });
+      }
     },
     [],
   );

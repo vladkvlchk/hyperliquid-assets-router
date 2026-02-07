@@ -19,7 +19,6 @@ export function RouteStep({ hop, index }: RouteStepProps) {
       <div className="flex-1 min-w-0">
         <div className="text-xs text-hl-text">
           {direction}
-          <span className="text-hl-text-dim ml-2">via {hop.pair.id}</span>
         </div>
         <div className="text-[10px] text-hl-muted font-mono mt-0.5">
           @ {hop.estimatedPrice.toFixed(6)} &middot; out:{" "}
